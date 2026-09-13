@@ -28,6 +28,7 @@ import {
   Edit2,
   Smartphone,
   Wallet,
+  Banknote,
 } from 'lucide-react';
 import {
   AreaChart,
