@@ -54,9 +54,9 @@ export const CartDrawer = ({ isOpen, onClose, onProceedToCheckout }) => {
         discountType: 'PERCENTAGE',
         discountValue: 10,
       });
-    } else if (couponCode.toUpperCase() === 'OMDA50') {
+    } else if (couponCode.toUpperCase() === 'GOMLA50' || couponCode.toUpperCase() === 'OMDA50') {
       setAppliedCoupon({
-        code: 'OMDA50',
+        code: couponCode.toUpperCase(),
         discountType: 'FIXED_AMOUNT',
         discountValue: 50,
       });

@@ -74,7 +74,7 @@ export const AuthModal = ({ isOpen, onClose, onSuccess }) => {
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div>
             <h3 className="text-base font-extrabold text-slate-900">
-              {isRegister ? 'إنشاء حساب جديد في العمدة' : 'تسجيل الدخول'}
+              {isRegister ? 'إنشاء حساب جديد في بيت الجملة' : 'تسجيل الدخول'}
             </h3>
             <p className="text-xs text-slate-500">
               {isRegister ? 'سجل كعميل تجزئة أو تاجر جملة' : 'أدخل بيانات حسابك للمتابعة'}

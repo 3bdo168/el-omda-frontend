@@ -328,7 +328,7 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
                   ) : (
                     <div className="space-y-1 text-[11px] leading-relaxed">
                       <p>- البنك الأهلي المصري (NBE): <strong>EG1200030000112233445566</strong></p>
-                      <p>- حساب إنستاباي (InstaPay): <strong>elomda@instapay</strong></p>
+                      <p>- حساب إنستاباي (InstaPay): <strong>beitelgomla@instapay</strong></p>
                       <p>- فودافون كاش: <strong>01012345678</strong></p>
                     </div>
                   )}

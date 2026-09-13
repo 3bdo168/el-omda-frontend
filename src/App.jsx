@@ -132,12 +132,12 @@ const MainApp = () => {
       <footer className="border-t border-slate-200 bg-white py-8 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-slate-900 text-sm">منصة العمدة</span>
+            <span className="font-extrabold text-slate-900 text-sm">بيت الجملة</span>
             <span>•</span>
             <span>بوابة تجارة الجملة والتجزئة الذكية B2B & B2C</span>
           </div>
           <div className="text-slate-400">
-            © {new Date().getFullYear()} El-Omda Platform. جميع الحقوق محفوظة.
+            © {new Date().getFullYear()} بيت الجملة. جميع الحقوق محفوظة.
           </div>
         </div>
       </footer>

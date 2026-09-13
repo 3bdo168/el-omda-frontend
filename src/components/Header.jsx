@@ -132,16 +132,14 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
               type="button"
               onClick={handleLogoClick}
               className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl p-1 -m-1 transition-smooth"
-              title="الرئيسية - متجر منصة العمدة"
+              title="الرئيسية - متجر بيت الجملة"
             >
-              {/* Brand Squircle Icon matching mockup */}
-              <div className="w-11 h-11 rounded-2xl bg-emerald-600 flex items-center justify-center text-white font-black text-2xl shadow-md shadow-emerald-600/25 group-hover:scale-105 active:scale-95 transition-smooth shrink-0">
-                ع
-              </div>
+              {/* Brand Logo Icon */}
+              <img src="/logo.png" alt="بيت الجملة" className="w-11 h-11 group-hover:scale-105 active:scale-95 transition-smooth shrink-0 object-contain" />
               <div className="flex flex-col text-right">
                 <div className="flex items-center gap-2">
                   <span className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-tight">
-                    منصة العمدة
+                    بيت الجملة
                   </span>
                   {/* Badge hidden on mobile (< 640px), visible on sm+ */}
                   <span className="hidden sm:inline-flex items-center text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 whitespace-nowrap">
@@ -513,13 +511,11 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                     type="button"
                     onClick={handleLogoClick}
                     className="flex items-center gap-2.5 text-right focus:outline-none group cursor-pointer"
-                    title="الرئيسية - متجر منصة العمدة"
+                    title="الرئيسية - متجر بيت الجملة"
                   >
-                    <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-black text-lg shadow-sm group-hover:scale-105 active:scale-95 transition-smooth">
-                      ع
-                    </div>
+                    <img src="/logo.png" alt="بيت الجملة" className="w-9 h-9 group-hover:scale-105 active:scale-95 transition-smooth object-contain" />
                     <div>
-                      <h3 className="font-black text-slate-900 text-sm">منصة العمدة</h3>
+                      <h3 className="font-black text-slate-900 text-sm">بيت الجملة</h3>
                       <p className="text-[10px] text-slate-500 font-medium">تجارة الجملة والتجزئة</p>
                     </div>
                   </button>
@@ -718,7 +714,7 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                       <User className="w-5 h-5" />
                     </div>
                     <h4 className="font-extrabold text-slate-900 text-xs mb-1">
-                      أهلاً بك في منصة العمدة
+                      أهلاً بك في بيت الجملة
                     </h4>
                     <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
                       سجّل دخولك للوصول إلى أسعار تجار الجملة

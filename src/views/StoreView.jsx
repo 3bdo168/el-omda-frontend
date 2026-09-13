@@ -142,7 +142,7 @@ export const StoreView = ({ onOpenCart }) => {
             <span>بوابة التوريد والتجارة الذكية</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight">
-            مستودعات العمدة لتجارة الجملة والتجزئة
+            مستودعات بيت الجملة لتجارة الجملة والتجزئة
           </h2>
           <p className="text-sm text-emerald-100/90 leading-relaxed">
             أفضل الأسعار المباشرة من المصنع للمستهلك وللتجار. خصومات تصاعدية لطلبات الجملة
@@ -512,7 +512,7 @@ export const StoreView = ({ onOpenCart }) => {
                       {prod.name}
                     </h3>
                     <p className="text-xs text-slate-600 mt-2 leading-relaxed whitespace-pre-line">
-                      {prod.description || 'منتج ممتاز متوفر من مستودعات العمدة بأعلى معايير الجودة والضمان المباشر.'}
+                      {prod.description || 'منتج ممتاز متوفر من مستودعات بيت الجملة بأعلى معايير الجودة والضمان المباشر.'}
                     </p>
                   </div>
 
