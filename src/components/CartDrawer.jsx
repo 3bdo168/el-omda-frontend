@@ -20,7 +20,7 @@ export const CartDrawer = ({ isOpen, onClose, onProceedToCheckout }) => {
     clearCart,
   } = useCart();
 
-  const { isTrader } = useAuth();
+  const { isTrader, user } = useAuth();
   const [couponError, setCouponError] = useState('');
 
   // Body scroll lock & Escape key handling
@@ -293,6 +293,13 @@ export const CartDrawer = ({ isOpen, onClose, onProceedToCheckout }) => {
               <p className="text-[11px] text-amber-700 text-center font-bold">
                 ⚠️ يرجى تصحيح الكميات لتتوافق مع الحد الأدنى للطلب لكل منتج
               </p>
+            )}
+
+            {isTrader && user?.approvalStatus !== 'APPROVED' && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>حسابك كتاجر قيد المراجعة — إتمام الطلبات متاح بعد اعتماد الإدارة.</span>
+              </div>
             )}
           </div>
         )}

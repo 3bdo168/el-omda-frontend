@@ -165,6 +165,18 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
             </div>
           )}
 
+          {user?.userType === 'TRADER' && user?.approvalStatus !== 'APPROVED' && (
+            <div className="mb-4 p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-xs text-amber-900 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">حسابك كتاجر ما زال قيد المراجعة (PENDING)</p>
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  حسابك بانتظار موافقة الإدارة. يمكنك تصفح المتجر والأسعار، ولكن لا يمكن إتمام الطلبات إلا بعد تفعيل الحساب.
+                </p>
+              </div>
+            </div>
+          )}
+
           {!createdOrder ? (
             <div className="space-y-5">
               {/* Order Summary */}

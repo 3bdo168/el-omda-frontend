@@ -86,7 +86,9 @@ export const StoreView = ({ onOpenCart }) => {
     try {
       const [catsRes] = await Promise.all([api.getCategories()]);
       if (catsRes.success) {
-        const activeCats = (catsRes.data || []).filter((c) => c.isActive !== false);
+        const activeCats = (catsRes.data || []).filter(
+          (c) => c.isActive !== false && (c._count?.products || 0) > 0
+        );
         setCategories(activeCats);
       }
       await fetchProducts();
