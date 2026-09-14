@@ -138,8 +138,9 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
               <img src="/logo.png" alt="بيت الجملة" className="w-11 h-11 group-hover:scale-105 active:scale-95 transition-smooth shrink-0 object-contain" />
               <div className="flex flex-col text-right">
                 <div className="flex items-center gap-2">
-                  <span className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-tight">
+                  <span className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-tight flex items-baseline gap-1.5">
                     بيت الجملة
+                    <span className="text-[10px] sm:text-[11px] font-normal text-slate-500 whitespace-nowrap">تبع مؤسسه صلى على النبى</span>
                   </span>
                   {/* Badge hidden on mobile (< 640px), visible on sm+ */}
                   <span className="hidden sm:inline-flex items-center text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 whitespace-nowrap">
@@ -515,7 +516,10 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                   >
                     <img src="/logo.png" alt="بيت الجملة" className="w-9 h-9 group-hover:scale-105 active:scale-95 transition-smooth object-contain" />
                     <div>
-                      <h3 className="font-black text-slate-900 text-sm">بيت الجملة</h3>
+                      <h3 className="font-black text-slate-900 text-sm flex items-baseline gap-1">
+                        بيت الجملة
+                        <span className="text-[9px] font-normal text-slate-500 whitespace-nowrap">تبع مؤسسه صلى على النبى</span>
+                      </h3>
                       <p className="text-[10px] text-slate-500 font-medium">تجارة الجملة والتجزئة</p>
                     </div>
                   </button>
@@ -713,9 +717,9 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                     <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mb-2">
                       <User className="w-5 h-5" />
                     </div>
-                    <h4 className="font-extrabold text-slate-900 text-xs mb-1">
-                      أهلاً بك في بيت الجملة
-                    </h4>
+                    <div className="font-extrabold text-slate-900 mb-1">
+                      أهلاً بك في بيت الجملة <span className="font-normal text-[10px] text-slate-500 whitespace-nowrap">تبع مؤسسه صلى على النبى</span>
+                    </div>
                     <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
                       سجّل دخولك للوصول إلى أسعار تجار الجملة
                     </p>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Crown,
   TrendingUp,
@@ -41,6 +42,7 @@ import {
 } from 'recharts';
 import { api } from '../services/api';
 import { Modal } from '../components/Modal';
+import { MetricCardSkeleton, TableRowSkeleton } from '../components/Skeleton';
 
 // ─── Revenue Trend Chart ──────────────────────────────────────────────────────
 
@@ -136,11 +138,7 @@ const RevenueChart = ({ timeSeries, period }) => {
 export const OwnerView = () => {
   const [activeTab, setActiveTab] = useState('financial'); // 'financial' | 'employees' | 'products'
   const [datePeriod, setDatePeriod] = useState('ALL'); // 'TODAY' | 'WEEK' | 'MONTH' | 'ALL'
-  const [isLoading, setIsLoading] = useState(false);
-
-  const [financialData, setFinancialData] = useState(null);
-  const [employeesData, setEmployeesData] = useState([]);
-  const [productsData, setProductsData] = useState(null);
+  const queryClient = useQueryClient();
 
   // ── Employee Management State ───────────────────────────────────────────────
   const [showCreateEmployeeModal, setShowCreateEmployeeModal] = useState(false);
@@ -161,8 +159,6 @@ export const OwnerView = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   // ── Payment Destinations State ──────────────────────────────────────────────
-  const [destinationsList, setDestinationsList] = useState([]);
-  const [destLoading, setDestLoading] = useState(false);
   const [showDestModal, setShowDestModal] = useState(false);
   const [destModalMode, setDestModalMode] = useState('create'); // 'create' | 'edit'
   const [destForm, setDestForm] = useState({
@@ -176,10 +172,6 @@ export const OwnerView = () => {
   });
   const [destSubmitting, setDestSubmitting] = useState(false);
   const [destError, setDestError] = useState('');
-
-  useEffect(() => {
-    loadData();
-  }, [activeTab, datePeriod]);
 
   const getDateRangeParams = () => {
     const now = new Date();
@@ -201,45 +193,80 @@ export const OwnerView = () => {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate && startDate) params.append('endDate', endDate);
-    params.append('period', datePeriod); // tells backend which bucket granularity to use
+    params.append('period', datePeriod);
     return params.toString();
   };
 
-  const loadDestinations = async () => {
-    setDestLoading(true);
-    try {
+  // Queries
+  const {
+    data: financialData = null,
+    isLoading: isLoadingFinancial,
+    isFetching: isFetchingFinancial,
+  } = useQuery({
+    queryKey: ['owner', 'financial', datePeriod],
+    queryFn: async () => {
+      const res = await api.owner.getFinancialReport(getDateRangeParams());
+      return res.success ? res.data : null;
+    },
+    enabled: activeTab === 'financial',
+  });
+
+  const {
+    data: employeesData = [],
+    isLoading: isLoadingEmployees,
+    isFetching: isFetchingEmployees,
+  } = useQuery({
+    queryKey: ['owner', 'employees', datePeriod],
+    queryFn: async () => {
+      const res = await api.owner.getEmployeePerformance(getDateRangeParams());
+      return res.success ? res.data || [] : [];
+    },
+    enabled: activeTab === 'employees',
+  });
+
+  const {
+    data: productsData = null,
+    isLoading: isLoadingProducts,
+    isFetching: isFetchingProducts,
+  } = useQuery({
+    queryKey: ['owner', 'products', datePeriod],
+    queryFn: async () => {
+      const res = await api.owner.getProductPerformance(getDateRangeParams());
+      return res.success ? res.data : null;
+    },
+    enabled: activeTab === 'products',
+  });
+
+  const {
+    data: destinationsList = [],
+    isLoading: isLoadingDestinations,
+    isFetching: isFetchingDestinations,
+  } = useQuery({
+    queryKey: ['payment-destinations', 'all'],
+    queryFn: async () => {
       const res = await api.paymentDestinations.getAll();
-      if (res.success && Array.isArray(res.data)) {
-        setDestinationsList(res.data);
-      }
-    } catch (err) {
-      console.error('Failed to load payment destinations:', err);
-    } finally {
-      setDestLoading(false);
-    }
-  };
+      return res.success && Array.isArray(res.data) ? res.data : [];
+    },
+    enabled: activeTab === 'payments',
+  });
 
-  const loadData = async () => {
-    setIsLoading(true);
-    const params = getDateRangeParams();
+  const isTabLoading =
+    (activeTab === 'financial' && isLoadingFinancial) ||
+    (activeTab === 'employees' && isLoadingEmployees) ||
+    (activeTab === 'products' && isLoadingProducts) ||
+    (activeTab === 'payments' && isLoadingDestinations);
 
-    try {
-      if (activeTab === 'financial') {
-        const res = await api.owner.getFinancialReport(params);
-        if (res.success) setFinancialData(res.data);
-      } else if (activeTab === 'employees') {
-        const res = await api.owner.getEmployeePerformance(params);
-        if (res.success) setEmployeesData(res.data || []);
-      } else if (activeTab === 'products') {
-        const res = await api.owner.getProductPerformance(params);
-        if (res.success) setProductsData(res.data);
-      } else if (activeTab === 'payments') {
-        await loadDestinations();
-      }
-    } catch (err) {
-      console.error('Owner dashboard load failed:', err);
-    } finally {
-      setIsLoading(false);
+  const isTabFetching =
+    (activeTab === 'financial' && isFetchingFinancial) ||
+    (activeTab === 'employees' && isFetchingEmployees) ||
+    (activeTab === 'products' && isFetchingProducts) ||
+    (activeTab === 'payments' && isFetchingDestinations);
+
+  const handleRefreshOwnerData = () => {
+    if (activeTab === 'payments') {
+      queryClient.invalidateQueries({ queryKey: ['payment-destinations'] });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['owner'] });
     }
   };
 
@@ -305,7 +332,7 @@ export const OwnerView = () => {
       }
 
       setShowDestModal(false);
-      await loadDestinations();
+      queryClient.invalidateQueries({ queryKey: ['payment-destinations'] });
     } catch (err) {
       setDestError(err.message || 'فشلت العملية');
     } finally {
@@ -316,7 +343,7 @@ export const OwnerView = () => {
   const handleToggleDestActive = async (dest) => {
     try {
       await api.paymentDestinations.update(dest.id, { isActive: !dest.isActive });
-      await loadDestinations();
+      queryClient.invalidateQueries({ queryKey: ['payment-destinations'] });
     } catch (err) {
       alert(err.message || 'فشل تحديث الحالة');
     }
@@ -326,7 +353,7 @@ export const OwnerView = () => {
     if (!window.confirm(`هل أنت متأكد من حذف "${dest.label}"؟`)) return;
     try {
       await api.paymentDestinations.delete(dest.id);
-      await loadDestinations();
+      queryClient.invalidateQueries({ queryKey: ['payment-destinations'] });
     } catch (err) {
       alert(err.message || 'فشل حذف وسيلة الدفع');
     }
@@ -349,7 +376,7 @@ export const OwnerView = () => {
       if (res.success) {
         setShowCreateEmployeeModal(false);
         setCreateEmpForm({ name: '', email: '', phone: '', password: '', targetAmount: '', targetOrders: '' });
-        loadData(); // refresh employee list
+        queryClient.invalidateQueries({ queryKey: ['owner', 'employees'] });
       }
     } catch (err) {
       setCreateEmpError(err.message || 'حدث خطأ أثناء إنشاء الموظف');
@@ -397,7 +424,7 @@ export const OwnerView = () => {
         // Close and refresh
         setShowAdjustmentModal(false);
         setAdjPreview(null);
-        loadData();
+        queryClient.invalidateQueries({ queryKey: ['owner', 'employees'] });
       }
     } catch (err) {
       setAdjError(err.message || 'حدث خطأ أثناء إنشاء المكافأة/الخصم');
@@ -480,11 +507,11 @@ export const OwnerView = () => {
             </button>
           ))}
           <button
-            onClick={loadData}
+            onClick={handleRefreshOwnerData}
             className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200"
             title="تحديث"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isTabFetching ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -541,6 +568,15 @@ export const OwnerView = () => {
       </div>
 
       {/* ── TAB 1: FINANCIAL REPORTS ────────────────────────────────────────── */}
+      {activeTab === 'financial' && isLoadingFinancial && !financialData && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <MetricCardSkeleton key={i} />
+            ))}
+          </div>
+        </div>
+      )}
       {activeTab === 'financial' && financialData && (
         <div className="space-y-6">
           {/* Revenue Trend Chart */}
@@ -717,7 +753,13 @@ export const OwnerView = () => {
             </button>
           </div>
 
-          {employeesData.length === 0 ? (
+          {isLoadingEmployees ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <MetricCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : employeesData.length === 0 ? (
             <div className="py-16 text-center glass-card rounded-3xl p-6 text-slate-400">
               <Users className="w-12 h-12 mx-auto mb-2 text-slate-300" />
               <h4 className="font-bold text-slate-700">لا يوجد موظفون مسجلون حالياً بالنظام</h4>
@@ -839,6 +881,17 @@ export const OwnerView = () => {
       )}
 
       {/* ── TAB 3: PRODUCT ANALYTICS (TOP & LOWEST SELLING) ────────────────── */}
+      {activeTab === 'products' && isLoadingProducts && !productsData && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="glass-card p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+              {Array.from({ length: 5 }).map((_, j) => (
+                <TableRowSkeleton key={j} cols={3} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
       {activeTab === 'products' && productsData && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Top Selling Products */}

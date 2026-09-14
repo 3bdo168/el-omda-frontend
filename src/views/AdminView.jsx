@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Package,
   Layers,
@@ -50,6 +51,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { api, getImageUrl } from '../services/api';
 import { useNotifications } from '../context/NotificationContext';
 import { Modal, ConfirmModal } from '../components/Modal';
+import { TableRowSkeleton } from '../components/Skeleton';
 
 const SortableCategoryItem = ({
   category,
@@ -201,8 +203,9 @@ const SortableCategoryItem = ({
 };
 
 export const AdminView = ({ initialSubTab = 'orders' }) => {
-  const [activeSubTab, setActiveSubTab] = useState(initialSubTab); // 'orders' | 'receipts' | 'products' | 'inventory' | 'traders'
-  const [isLoading, setIsLoading] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState(initialSubTab); // 'orders' | 'receipts' | 'products' | 'categories' | 'inventory' | 'traders'
+  const queryClient = useQueryClient();
+  const { refreshNotifications } = useNotifications();
 
   useEffect(() => {
     if (initialSubTab) {
@@ -210,13 +213,107 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
     }
   }, [initialSubTab]);
 
-  // Data States
-  const [orders, setOrders] = useState([]);
-  const [pendingReceipts, setPendingReceipts] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [lowStockProducts, setLowStockProducts] = useState([]);
-  const [pendingTraders, setPendingTraders] = useState([]);
+  // ── Queries with React Query ─────────────────────────────────────────────
+  const {
+    data: orders = [],
+    isLoading: isLoadingOrders,
+    isFetching: isFetchingOrders,
+  } = useQuery({
+    queryKey: ['admin', 'orders'],
+    queryFn: async () => {
+      const res = await api.admin.getOrders();
+      return res.success ? res.data || [] : [];
+    },
+  });
+
+  const {
+    data: pendingReceipts = [],
+    isLoading: isLoadingReceipts,
+    isFetching: isFetchingReceipts,
+  } = useQuery({
+    queryKey: ['admin', 'receipts'],
+    queryFn: async () => {
+      const res = await api.admin.getPendingReceipts();
+      return res.success ? res.data || [] : [];
+    },
+  });
+
+  const {
+    data: categories = [],
+    isLoading: isLoadingCategories,
+    isFetching: isFetchingCategories,
+  } = useQuery({
+    queryKey: ['admin', 'categories'],
+    queryFn: async () => {
+      const res = await api.admin.getCategories();
+      return res.success ? res.data || [] : [];
+    },
+  });
+
+  const {
+    data: products = [],
+    isLoading: isLoadingProducts,
+    isFetching: isFetchingProducts,
+  } = useQuery({
+    queryKey: ['admin', 'products'],
+    queryFn: async () => {
+      const res = await api.getProducts('limit=100');
+      return res.success ? res.data || [] : [];
+    },
+    staleTime: 10 * 1000, // 10s for stock/price accuracy
+  });
+
+  const {
+    data: lowStockProducts = [],
+    isLoading: isLoadingLowStock,
+    isFetching: isFetchingLowStock,
+  } = useQuery({
+    queryKey: ['admin', 'inventory', 'low-stock'],
+    queryFn: async () => {
+      const res = await api.admin.getLowStock();
+      return res.success ? res.data || [] : [];
+    },
+    staleTime: 10 * 1000, // 10s for low stock alert accuracy
+  });
+
+  const {
+    data: pendingTraders = [],
+    isLoading: isLoadingTraders,
+    isFetching: isFetchingTraders,
+  } = useQuery({
+    queryKey: ['admin', 'traders'],
+    queryFn: async () => {
+      const res = await api.admin.getPendingTraders();
+      return res.success ? res.data || [] : [];
+    },
+  });
+
+  const isTabLoading =
+    (activeSubTab === 'orders' && isLoadingOrders) ||
+    (activeSubTab === 'receipts' && isLoadingReceipts) ||
+    (activeSubTab === 'products' && isLoadingProducts) ||
+    (activeSubTab === 'categories' && isLoadingCategories) ||
+    (activeSubTab === 'inventory' && isLoadingLowStock) ||
+    (activeSubTab === 'traders' && isLoadingTraders);
+
+  const isTabFetching =
+    (activeSubTab === 'orders' && isFetchingOrders) ||
+    (activeSubTab === 'receipts' && isFetchingReceipts) ||
+    (activeSubTab === 'products' && isFetchingProducts) ||
+    (activeSubTab === 'categories' && isFetchingCategories) ||
+    (activeSubTab === 'inventory' && isFetchingLowStock) ||
+    (activeSubTab === 'traders' && isFetchingTraders);
+
+  const handleRefreshCurrentTab = () => {
+    if (activeSubTab === 'orders') queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
+    else if (activeSubTab === 'receipts') queryClient.invalidateQueries({ queryKey: ['admin', 'receipts'] });
+    else if (activeSubTab === 'products') {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'products'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
+    } else if (activeSubTab === 'categories') queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
+    else if (activeSubTab === 'inventory') queryClient.invalidateQueries({ queryKey: ['admin', 'inventory', 'low-stock'] });
+    else if (activeSubTab === 'traders') queryClient.invalidateQueries({ queryKey: ['admin', 'traders'] });
+  };
 
   // Modals & Action States
   const [selectedReceipt, setSelectedReceipt] = useState(null);
@@ -283,46 +380,7 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
     })
   );
 
-  const { refreshNotifications } = useNotifications();
-
-  useEffect(() => {
-    loadTabData(activeSubTab);
-  }, [activeSubTab]);
-
-  const loadTabData = async (tab) => {
-    setIsLoading(true);
-    try {
-      if (tab === 'orders') {
-        const res = await api.admin.getOrders();
-        if (res.success) setOrders(res.data || []);
-      } else if (tab === 'receipts') {
-        const res = await api.admin.getPendingReceipts();
-        if (res.success) setPendingReceipts(res.data || []);
-      } else if (tab === 'products') {
-        const [resProd, catRes] = await Promise.all([
-          api.getProducts('limit=100'),
-          api.admin.getCategories(),
-        ]);
-        if (resProd.success) setProducts(resProd.data || []);
-        if (catRes.success) setCategories(catRes.data || []);
-      } else if (tab === 'categories') {
-        const catRes = await api.admin.getCategories();
-        if (catRes.success) setCategories(catRes.data || []);
-      } else if (tab === 'inventory') {
-        const res = await api.admin.getLowStock();
-        if (res.success) setLowStockProducts(res.data || []);
-      } else if (tab === 'traders') {
-        const res = await api.admin.getPendingTraders();
-        if (res.success) setPendingTraders(res.data || []);
-      }
-    } catch (err) {
-      console.error(`Failed to load ${tab}:`, err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // ── Category Management Actions ──────────────────────────────────────────
+  // ── Category Management Actions with Invalidation ──────────────────────────
   const handleCategoryDragEnd = async (event) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -336,7 +394,7 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
       displayOrder: idx,
     }));
 
-    setCategories(newCategories);
+    queryClient.setQueryData(['admin', 'categories'], newCategories);
 
     try {
       await api.admin.reorderCategories(
@@ -345,10 +403,11 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
           displayOrder: idx,
         }))
       );
+      queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
     } catch (err) {
       console.error('Failed to save reordered categories:', err);
-      const res = await api.admin.getCategories();
-      if (res.success) setCategories(res.data || []);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
     }
   };
 
@@ -365,8 +424,8 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
       if (res.success) {
         setShowAddCategoryModal(false);
         setNewCategoryName('');
-        const catRes = await api.admin.getCategories();
-        if (catRes.success) setCategories(catRes.data || []);
+        queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
+        queryClient.invalidateQueries({ queryKey: ['categories'] });
       } else {
         setCategoryModalError(res.message || 'فشل إضافة القسم');
       }
@@ -398,8 +457,8 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
       if (res.success) {
         setCategoryToEdit(null);
         setEditCategoryName('');
-        const catRes = await api.admin.getCategories();
-        if (catRes.success) setCategories(catRes.data || []);
+        queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
+        queryClient.invalidateQueries({ queryKey: ['categories'] });
       } else {
         setCategoryModalError(res.message || 'فشل تحديث القسم');
       }
@@ -413,21 +472,14 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
   const handleToggleCategoryActive = async (category) => {
     const updatedStatus = !category.isActive;
     setIsTogglingCategory(true);
-    setCategories((prev) =>
-      prev.map((c) => (c.id === category.id ? { ...c, isActive: updatedStatus } : c))
-    );
     try {
       const res = await api.admin.updateCategory(category.id, { isActive: updatedStatus });
-      if (!res.success) {
-        setCategories((prev) =>
-          prev.map((c) => (c.id === category.id ? { ...c, isActive: !updatedStatus } : c))
-        );
+      if (res.success) {
+        queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
+        queryClient.invalidateQueries({ queryKey: ['categories'] });
       }
     } catch (err) {
       console.error('Failed to update category status:', err);
-      setCategories((prev) =>
-        prev.map((c) => (c.id === category.id ? { ...c, isActive: !updatedStatus } : c))
-      );
     } finally {
       setIsTogglingCategory(false);
     }
@@ -449,7 +501,8 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
         try {
           const res = await api.admin.deleteCategory(category.id);
           if (res.success) {
-            setCategories((prev) => prev.filter((c) => c.id !== category.id));
+            queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] });
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
           } else {
             alert(res.message || 'فشل حذف القسم');
           }
@@ -462,25 +515,27 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
     });
   };
 
-  // ── Receipt Actions ────────────────────────────────────────────────────────
+  // ── Receipt Actions with Invalidation ──────────────────────────────────────
   const handleVerifyReceipt = async (orderId, action, reason = '') => {
     try {
       await api.admin.verifyReceipt(orderId, action, reason);
       setShowRejectModal(false);
       setSelectedReceipt(null);
       setRejectReason('');
-      loadTabData('receipts');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
+      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
       refreshNotifications();
     } catch (err) {
       alert(err.message || 'فشلت معالجة الإيصال');
     }
   };
 
-  // ── Trader Actions ─────────────────────────────────────────────────────────
+  // ── Trader Actions with Invalidation ───────────────────────────────────────
   const handleApproveTrader = async (userId) => {
     try {
       await api.admin.approveTrader(userId);
-      loadTabData('traders');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'traders'] });
       refreshNotifications();
     } catch (err) {
       alert(err.message || 'فشل قبول التاجر');
@@ -492,14 +547,14 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
     if (reason === null) return;
     try {
       await api.admin.rejectTrader(userId, reason);
-      loadTabData('traders');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'traders'] });
       refreshNotifications();
     } catch (err) {
       alert(err.message || 'فشل رفض التاجر');
     }
   };
 
-  // ── Order Status & Payment Status Update ──────────────────────────────────
+  // ── Order Status & Payment Status Update with Invalidation ─────────────────
   const executeUpdateOrderStatus = async () => {
     if (!statusModalOrder) return;
     setIsUpdatingOrder(true);
@@ -521,7 +576,8 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
 
       setStatusModalOrder(null);
       setShowDeliveredWarning(false);
-      loadTabData('orders');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
+      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
       refreshNotifications();
     } catch (err) {
       alert(err.message || 'فشل تحديث بيانات الطلب');
@@ -541,7 +597,6 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
       return;
     }
 
-    // Warning confirmation: if marking as DELIVERED while paymentStatus is PENDING for non-COD orders
     const isMarkingDelivered = newOrderStatus === 'DELIVERED';
     const isPaymentStillPending = newPaymentStatus === 'PENDING';
     const isNonCod = statusModalOrder.paymentMethod !== 'CASH_ON_DELIVERY';
@@ -554,11 +609,11 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
     await executeUpdateOrderStatus();
   };
 
-  // ── Order Payment Status Quick Action (e.g. COD Cash Collected) ───────────
   const handleMarkPaymentStatus = async (orderId, paymentStatus = 'PAID') => {
     try {
       await api.admin.updatePaymentStatus(orderId, paymentStatus);
-      loadTabData('orders');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
+      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
       if (statusModalOrder && statusModalOrder.id === orderId) {
         setStatusModalOrder((prev) => ({ ...prev, paymentStatus }));
         setNewPaymentStatus(paymentStatus);
@@ -569,7 +624,7 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
     }
   };
 
-  // ── Product CRUD & Form Handlers ──────────────────────────────────────────
+  // ── Product CRUD & Form Handlers with Invalidation ─────────────────────────
   const validateProductForm = () => {
     const errors = {};
     if (!productForm.name || !productForm.name.trim()) {
@@ -653,7 +708,6 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
         savedProduct = res.data;
       }
 
-      // If an image file was selected, upload it to Cloudinary
       if (productImageFile && savedProduct?.id) {
         const formData = new FormData();
         formData.append('image', productImageFile);
@@ -665,7 +719,9 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
       setProductImageFile(null);
       setProductImagePreview(null);
       setFormErrors({});
-      loadTabData('products');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'products'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'inventory', 'low-stock'] });
     } catch (err) {
       alert(err.message || 'فشل حفظ المنتج');
     } finally {
@@ -684,7 +740,9 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
         try {
           const res = await api.admin.deleteProduct(id);
           alert(res.message);
-          loadTabData('products');
+          queryClient.invalidateQueries({ queryKey: ['admin', 'products'] });
+          queryClient.invalidateQueries({ queryKey: ['products'] });
+          queryClient.invalidateQueries({ queryKey: ['admin', 'inventory', 'low-stock'] });
         } catch (err) {
           alert(err.message || 'فشل حذف المنتج');
         } finally {
@@ -694,15 +752,7 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
     });
   };
 
-  const openAddProductModal = async () => {
-    let cats = categories;
-    if (!cats || cats.length === 0) {
-      const catRes = await api.admin.getCategories();
-      if (catRes.success && catRes.data) {
-        cats = catRes.data;
-        setCategories(cats);
-      }
-    }
+  const openAddProductModal = () => {
     setEditingProduct(null);
     setProductImageFile(null);
     setProductImagePreview(null);
@@ -711,7 +761,7 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
       name: '',
       sku: `SKU-${Date.now().toString().slice(-5)}`,
       description: '',
-      categoryId: cats?.[0]?.id || '',
+      categoryId: categories?.[0]?.id || '',
       retailPrice: '',
       minOrderQtyRetail: 1,
       minOrderQtyWholesale: 5,
@@ -726,13 +776,7 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
     setShowProductModal(true);
   };
 
-  const openEditProductModal = async (prod) => {
-    if (!categories || categories.length === 0) {
-      const catRes = await api.admin.getCategories();
-      if (catRes.success && catRes.data) {
-        setCategories(catRes.data);
-      }
-    }
+  const openEditProductModal = (prod) => {
     setEditingProduct(prod);
     setProductImageFile(null);
     setProductImagePreview(prod.imageUrl ? getImageUrl(prod.imageUrl) : null);
@@ -774,10 +818,10 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
         </div>
 
         <button
-          onClick={() => loadTabData(activeSubTab)}
+          onClick={handleRefreshCurrentTab}
           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-smooth self-start sm:self-auto"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${isTabFetching ? 'animate-spin' : ''}`} />
           <span>تحديث البيانات</span>
         </button>
       </div>
@@ -902,13 +946,23 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {orders.map((o) => (
-                  <tr key={o.id} className="hover:bg-slate-50/80 transition-smooth">
-                    <td className="p-3 font-mono font-bold text-slate-900">#{o.orderNumber}</td>
-                    <td className="p-3">
-                      <div className="font-bold text-slate-800">{o.user?.name}</div>
-                      <div className="text-[10px] text-slate-400">{o.user?.email}</div>
+                {isLoadingOrders ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <TableRowSkeleton key={i} columns={9} />
+                  ))
+                ) : orders.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-slate-400 font-bold">
+                      لا توجد طلبات مسجلة حالياً
                     </td>
+                  </tr>
+                ) : orders.map((o) => (
+                    <tr key={o.id} className="hover:bg-slate-50/80 transition-smooth">
+                      <td className="p-3 font-mono font-bold text-slate-900">#{o.orderNumber}</td>
+                      <td className="p-3">
+                        <div className="font-bold text-slate-800">{o.user?.name}</div>
+                        <div className="text-[10px] text-slate-400">{o.user?.email}</div>
+                      </td>
                     <td className="p-3">
                       <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-semibold text-slate-700">
                         {o.orderType === 'WHOLESALE' ? 'جملة' : 'قطاعي'}
@@ -1125,9 +1179,19 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {products.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50 transition-smooth">
-                    <td className="p-3">
+                {isLoadingProducts ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <TableRowSkeleton key={i} columns={9} />
+                  ))
+                ) : products.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-slate-400 font-bold">
+                      لا توجد منتجات مسجلة حالياً
+                    </td>
+                  </tr>
+                ) : products.map((p) => (
+                    <tr key={p.id} className="hover:bg-slate-50 transition-smooth">
+                      <td className="p-3">
                       {p.imageUrl ? (
                         <img
                           src={getImageUrl(p.imageUrl)}
@@ -1363,7 +1427,13 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
           </div>
 
           {/* Categories List */}
-          {categories.length === 0 ? (
+          {isLoadingCategories ? (
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="glass-card p-4 rounded-2xl border border-slate-200 animate-pulse h-16 bg-slate-100/70" />
+              ))}
+            </div>
+          ) : categories.length === 0 ? (
             <div className="py-16 text-center glass-card rounded-3xl p-6 text-slate-400 border border-slate-200">
               <FolderTree className="w-12 h-12 text-slate-300 mx-auto mb-2" />
               <h4 className="font-bold text-slate-700">لا توجد أقسام مسجلة حالياً</h4>

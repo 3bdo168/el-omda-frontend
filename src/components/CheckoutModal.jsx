@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   X,
   CreditCard,
@@ -23,15 +24,25 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
   const { items, totalAmount, subtotal, discountAmount, appliedCoupon, clearCart } = useCart();
   const { user, isAuthenticated } = useAuth();
   const { refreshNotifications } = useNotifications();
+  const queryClient = useQueryClient();
 
   const [paymentMethod, setPaymentMethod] = useState('CASH_ON_DELIVERY');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdOrder, setCreatedOrder] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Payment Destinations State
-  const [destinations, setDestinations] = useState([]);
-  const [loadingDestinations, setLoadingDestinations] = useState(false);
+  // Payment Destinations via React Query
+  const {
+    data: destinations = [],
+    isLoading: loadingDestinations,
+  } = useQuery({
+    queryKey: ['payment-destinations', 'public'],
+    queryFn: async () => {
+      const res = await api.paymentDestinations.getPublic();
+      return res.success && Array.isArray(res.data) ? res.data : [];
+    },
+    enabled: isOpen,
+  });
   const [copiedValue, setCopiedValue] = useState(null);
 
   // Receipt Upload State
@@ -42,7 +53,6 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
 
   useEffect(() => {
     if (isOpen) {
-      fetchDestinations();
       // Reset order state when opening fresh
       if (!createdOrder) {
         setReceiptFile(null);
@@ -51,20 +61,6 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
       }
     }
   }, [isOpen]);
-
-  const fetchDestinations = async () => {
-    setLoadingDestinations(true);
-    try {
-      const res = await api.paymentDestinations.getPublic();
-      if (res.success && Array.isArray(res.data)) {
-        setDestinations(res.data);
-      }
-    } catch (err) {
-      console.error('Failed to load payment destinations:', err);
-    } finally {
-      setLoadingDestinations(false);
-    }
-  };
 
   const copyToClipboard = (text) => {
     navigator.clipboard?.writeText(text);
@@ -106,6 +102,10 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
         setCreatedOrder(res.data);
         clearCart();
         refreshNotifications();
+        queryClient.invalidateQueries({ queryKey: ['my-orders'] });
+        queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
+        queryClient.invalidateQueries({ queryKey: ['products'] });
+        queryClient.invalidateQueries({ queryKey: ['admin', 'inventory', 'low-stock'] });
       }
     } catch (err) {
       setErrorMsg(err.message || 'فشل إنشاء الطلب');
@@ -126,6 +126,8 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
       await api.uploadReceipt(createdOrder.id, formData);
       setReceiptUploadedSuccess(true);
       refreshNotifications();
+      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'receipts'] });
     } catch (err) {
       setErrorMsg(err.message || 'فشل رفع صورة الإيصال');
     } finally {

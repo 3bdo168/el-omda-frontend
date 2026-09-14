@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Package,
   Clock,
@@ -20,8 +21,18 @@ import { useNotifications } from '../context/NotificationContext';
 import { Modal } from '../components/Modal';
 
 export const OrdersView = ({ initialSelectedOrderId = null }) => {
-  const [orders, setOrders] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const {
+    data: orders = [],
+    isLoading,
+    isFetching,
+  } = useQuery({
+    queryKey: ['my-orders'],
+    queryFn: async () => {
+      const res = await api.getMyOrders();
+      return res.success && res.data ? res.data : [];
+    },
+  });
   const [expandedOrderId, setExpandedOrderId] = useState(initialSelectedOrderId);
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState(null);
 
@@ -35,10 +46,6 @@ export const OrdersView = ({ initialSelectedOrderId = null }) => {
   const { refreshNotifications } = useNotifications();
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  useEffect(() => {
     if (initialSelectedOrderId) {
       setExpandedOrderId(initialSelectedOrderId);
       setTimeout(() => {
@@ -50,19 +57,6 @@ export const OrdersView = ({ initialSelectedOrderId = null }) => {
     }
   }, [initialSelectedOrderId, orders.length]);
 
-  const fetchOrders = async () => {
-    setIsLoading(true);
-    try {
-      const res = await api.getMyOrders();
-      if (res.success && res.data) {
-        setOrders(res.data);
-      }
-    } catch (err) {
-      console.error('Failed to load orders:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleFileSelect = (e, orderId) => {
     const file = e.target.files[0];
@@ -87,7 +81,8 @@ export const OrdersView = ({ initialSelectedOrderId = null }) => {
       setUploadingForOrderId(null);
       setUploadFile(null);
       setUploadPreview(null);
-      await fetchOrders();
+      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'receipts'] });
       refreshNotifications();
     } catch (err) {
       setUploadError(err.message || 'فشل رفع الإيصال');
@@ -118,10 +113,10 @@ export const OrdersView = ({ initialSelectedOrderId = null }) => {
           </p>
         </div>
         <button
-          onClick={fetchOrders}
+          onClick={() => queryClient.invalidateQueries({ queryKey: ['my-orders'] })}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-smooth"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
           <span>تحديث</span>
         </button>
       </div>

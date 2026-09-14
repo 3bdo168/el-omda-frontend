@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Search,
   Filter,
@@ -16,28 +17,64 @@ import {
   Eye,
   ExternalLink,
   X,
+  RefreshCw,
 } from 'lucide-react';
 import { api, getImageUrl } from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/Modal';
+import { ProductCardSkeleton } from '../components/Skeleton';
 
 export const StoreView = ({ onOpenCart }) => {
   const { addToCart, items } = useCart();
   const { user, isTrader, isApprovedTrader } = useAuth();
 
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [inStockOnly, setInStockOnly] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedProductDetails, setSelectedProductDetails] = useState(null);
   const [modalQty, setModalQty] = useState(1);
   const [justAddedFeedback, setJustAddedFeedback] = useState(false);
 
   // Local quantity map for inputs
   const [qtyMap, setQtyMap] = useState({});
+
+  // Fetch Categories using React Query (default 60s staleTime)
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories', 'store'],
+    queryFn: async () => {
+      const catsRes = await api.getCategories();
+      if (catsRes.success) {
+        return (catsRes.data || []).filter(
+          (c) => c.isActive !== false && (c._count?.products || 0) > 0
+        );
+      }
+      return [];
+    },
+  });
+
+  // Fetch Products using React Query with short staleTime (10s) for real-time stock & pricing
+  const {
+    data: products = [],
+    isLoading: isLoadingProducts,
+    isFetching: isFetchingProducts,
+  } = useQuery({
+    queryKey: ['products', { selectedCategory, inStockOnly, search: activeSearchQuery }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedCategory) params.append('categoryId', selectedCategory);
+      if (inStockOnly) params.append('inStockOnly', 'true');
+      if (activeSearchQuery) params.append('search', activeSearchQuery);
+
+      const res = await api.getProducts(params.toString());
+      if (res.success && res.data) {
+        return res.data;
+      }
+      return [];
+    },
+    staleTime: 10 * 1000, // 10 seconds for real-time stock and pricing
+  });
 
   const calculateEffectivePrice = (product, quantity) => {
     if (!product) return { unitPrice: 0, total: 0, activeTier: null, isWholesaleApplied: false, savings: 0 };
@@ -74,51 +111,9 @@ export const StoreView = ({ onOpenCart }) => {
     setSelectedProductDetails(product);
   };
 
-  useEffect(() => {
-    fetchInitialData();
-  }, []);
-
-  useEffect(() => {
-    fetchProducts();
-  }, [selectedCategory, inStockOnly]);
-
-  const fetchInitialData = async () => {
-    try {
-      const [catsRes] = await Promise.all([api.getCategories()]);
-      if (catsRes.success) {
-        const activeCats = (catsRes.data || []).filter(
-          (c) => c.isActive !== false && (c._count?.products || 0) > 0
-        );
-        setCategories(activeCats);
-      }
-      await fetchProducts();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const fetchProducts = async () => {
-    setIsLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (selectedCategory) params.append('categoryId', selectedCategory);
-      if (inStockOnly) params.append('inStockOnly', 'true');
-      if (searchQuery) params.append('search', searchQuery);
-
-      const res = await api.getProducts(params.toString());
-      if (res.success && res.data) {
-        setProducts(res.data);
-      }
-    } catch (err) {
-      console.error('Failed to load products:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    fetchProducts();
+    setActiveSearchQuery(searchInput.trim());
   };
 
   const handleQtyChange = (productId, val, minQty) => {
@@ -144,7 +139,7 @@ export const StoreView = ({ onOpenCart }) => {
             <span>بوابة التوريد والتجارة الذكية</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight">
-            مستودعات بيت الجملة لتجارة الجملة والتجزئة
+            مستودعات بيت الجملة <span className="text-sm font-normal text-emerald-200/80 whitespace-nowrap">تبع مؤسسه صلى على النبى</span> لتجارة الجملة والتجزئة
           </h2>
           <p className="text-sm text-emerald-100/90 leading-relaxed">
             أفضل الأسعار المباشرة من المصنع للمستهلك وللتجار. خصومات تصاعدية لطلبات الجملة
@@ -210,8 +205,11 @@ export const StoreView = ({ onOpenCart }) => {
           <form onSubmit={handleSearchSubmit} className="relative w-full md:w-64">
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => {
+                setSearchInput(e.target.value);
+                if (!e.target.value.trim()) setActiveSearchQuery('');
+              }}
               placeholder="ابحث بالاسم أو كود SKU..."
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 pl-9 text-xs focus:outline-none focus:border-emerald-500 font-medium"
             />
@@ -222,14 +220,25 @@ export const StoreView = ({ onOpenCart }) => {
               <Search className="w-4 h-4" />
             </button>
           </form>
+
+          {isFetchingProducts && !isLoadingProducts && (
+            <div
+              title="جاري تحديث الأسعار والمخزون في الخلفية..."
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold animate-pulse"
+            >
+              <RefreshCw className="w-3 h-3 animate-spin text-emerald-600" />
+              <span>تحديث فوري</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Products Grid */}
-      {isLoading ? (
-        <div className="py-20 text-center text-slate-400">
-          <div className="animate-spin w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full mx-auto mb-3" />
-          <p className="text-xs font-bold">جاري تحميل المنتجات...</p>
+      {isLoadingProducts ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <ProductCardSkeleton key={i} />
+          ))}
         </div>
       ) : products.length === 0 ? (
         <div className="py-20 text-center text-slate-400 glass-card rounded-3xl">
@@ -514,7 +523,7 @@ export const StoreView = ({ onOpenCart }) => {
                       {prod.name}
                     </h3>
                     <p className="text-xs text-slate-600 mt-2 leading-relaxed whitespace-pre-line">
-                      {prod.description || 'منتج ممتاز متوفر من مستودعات بيت الجملة بأعلى معايير الجودة والضمان المباشر.'}
+                      {prod.description || 'منتج ممتاز متوفر من مستودعات بيت الجملة (تبع مؤسسه صلى على النبى) بأعلى معايير الجودة والضمان المباشر.'}
                     </p>
                   </div>
 
