@@ -22,6 +22,7 @@ import {
   CreditCard,
   AlertTriangle,
   UserCheck,
+  Briefcase,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -111,6 +112,7 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
   const getRoleLabel = () => {
     if (role === 'OWNER') return { label: 'مالك المنصة التنفيذي', shortLabel: 'مالك المنصة', color: 'bg-amber-100 text-amber-800 border-amber-300' };
     if (role === 'ADMIN') return { label: 'أدمن النظام', shortLabel: 'أدمن النظام', color: 'bg-purple-100 text-purple-800 border-purple-300' };
+    if (role === 'EMPLOYEE') return { label: 'موظف مبيعات', shortLabel: 'موظف', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' };
     if (isTrader) {
       if (user?.approvalStatus === 'APPROVED') {
         return { label: 'تاجر جملة معتمد', shortLabel: 'تاجر جملة معتمد', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
@@ -206,6 +208,20 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                 >
                   <Crown className="w-4 h-4" />
                   لوحة المالك
+                </button>
+              )}
+              
+              {(role === 'EMPLOYEE' || role === 'OWNER') && (
+                <button
+                  onClick={() => handleNavClick('employee')}
+                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-smooth flex items-center gap-2 ${
+                    activeTab === 'employee'
+                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+                      : 'text-indigo-700 hover:bg-indigo-50'
+                  }`}
+                >
+                  <Briefcase className="w-4 h-4" />
+                  لوحة الموظف
                 </button>
               )}
             </nav>
@@ -601,6 +617,24 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                         <span>لوحة تحكم المالك</span>
                       </div>
                       <ChevronLeft className={`w-4 h-4 shrink-0 ${activeTab === 'owner' ? 'text-white' : 'text-amber-400'}`} />
+                    </button>
+                  )}
+
+                  {/* 5. لوحة الموظف */}
+                  {(role === 'EMPLOYEE' || role === 'OWNER') && (
+                    <button
+                      onClick={() => handleNavClick('employee')}
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-smooth ${
+                        activeTab === 'employee'
+                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
+                          : 'bg-indigo-50/60 text-indigo-800 hover:bg-indigo-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Briefcase className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                        <span>لوحة الموظف</span>
+                      </div>
+                      <ChevronLeft className={`w-4 h-4 shrink-0 ${activeTab === 'employee' ? 'text-white' : 'text-indigo-400'}`} />
                     </button>
                   )}
                 </div>

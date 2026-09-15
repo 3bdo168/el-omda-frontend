@@ -1,5 +1,10 @@
 import React from 'react';
 
+// ─── Generic Skeleton ─────────────────────────────────────────────────────────
+export const Skeleton = ({ className = '' }) => (
+  <div className={`animate-pulse bg-slate-200 rounded ${className}`} />
+);
+
 export const ProductCardSkeleton = () => (
   <div className="glass-card rounded-3xl overflow-hidden border border-slate-200/90 shadow-sm animate-pulse flex flex-col">
     <div className="h-52 bg-slate-200" />

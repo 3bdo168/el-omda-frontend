@@ -42,6 +42,7 @@ import {
 } from 'recharts';
 import { api } from '../services/api';
 import { Modal } from '../components/Modal';
+import { TasksModal } from '../components/TasksModal';
 import { MetricCardSkeleton, TableRowSkeleton } from '../components/Skeleton';
 
 // ─── Revenue Trend Chart ──────────────────────────────────────────────────────
@@ -158,6 +159,9 @@ export const OwnerView = () => {
   const [historyData, setHistoryData] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  const [showTasksModal, setShowTasksModal] = useState(false);
+  const [tasksTarget, setTasksTarget] = useState(null); // { employeeId, name }
+  
   // ── Payment Destinations State ──────────────────────────────────────────────
   const [showDestModal, setShowDestModal] = useState(false);
   const [destModalMode, setDestModalMode] = useState('create'); // 'create' | 'edit'
@@ -469,6 +473,12 @@ export const OwnerView = () => {
     }
   };
 
+  // ── Load Tasks ──────────────────────────────────────────────────────────────
+  const openTasksModal = (emp) => {
+    setTasksTarget({ employeeId: emp.employeeId, name: emp.name });
+    setShowTasksModal(true);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 animate-fade-in">
       {/* Title & Period Selector */}
@@ -767,114 +777,161 @@ export const OwnerView = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {employeesData.map((emp) => (
-                <div
-                  key={emp.employeeId}
-                  className="glass-card rounded-3xl border border-slate-200 p-5 shadow-sm space-y-4"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-extrabold text-sm text-slate-900">{emp.name}</h4>
-                      <p className="text-xs text-slate-500">{emp.email}</p>
-                    </div>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        emp.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                      }`}
-                    >
-                      {emp.isActive ? 'نشط بالنظام' : 'معطل'}
-                    </span>
-                  </div>
+              {employeesData.map((emp) => {
+                const amtPct = parseFloat(emp.performance.amountProgressPercent) || 0;
+                const ordPct = parseFloat(emp.performance.ordersProgressPercent) || 0;
+                const bothAchieved = emp.performance.amountTargetAchieved && emp.performance.ordersTargetAchieved;
+                const eitherAchieved = emp.performance.amountTargetAchieved || emp.performance.ordersTargetAchieved;
+                const noTarget = emp.targets.targetAmount === null && emp.targets.targetOrders === null;
+                const nearTarget = !bothAchieved && (amtPct >= 75 || ordPct >= 75);
 
-                  {/* Progress Bars */}
-                  <div className="space-y-3 pt-2 border-t border-slate-100 text-xs">
-                    {/* Financial Target Progress */}
-                    <div>
-                      <div className="flex justify-between font-bold mb-1">
-                        <span className="text-slate-600">التارجت المالي:</span>
-                        <span className="text-emerald-700">
-                          {emp.performance.totalSalesAchieved} / {emp.targets.targetAmount || 0} ج.م (
-                          {emp.performance.amountProgressPercent})
+                // Determine status badge
+                let statusBadge;
+                if (noTarget) {
+                  statusBadge = { emoji: '⚪', label: 'لم يحدد تارجت', bg: 'bg-slate-100 text-slate-600 border-slate-200' };
+                } else if (bothAchieved) {
+                  statusBadge = { emoji: '🟢', label: 'حقق التارجت! 🏆', bg: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+                } else if (nearTarget) {
+                  statusBadge = { emoji: '🟡', label: 'قريب من التحقيق', bg: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
+                } else {
+                  statusBadge = { emoji: '🔵', label: 'قيد العمل', bg: 'bg-blue-100 text-blue-700 border-blue-200' };
+                }
+
+                const cardBorder = bothAchieved
+                  ? 'border-emerald-300 shadow-emerald-100 shadow-md'
+                  : 'border-slate-200 shadow-sm';
+
+                return (
+                  <div
+                    key={emp.employeeId}
+                    className={`glass-card rounded-3xl border p-5 space-y-4 ${cardBorder}`}
+                  >
+                    {/* Header */}
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-extrabold text-sm text-slate-900">{emp.name}</h4>
+                        <p className="text-xs text-slate-500">{emp.email}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadge.bg}`}>
+                          {statusBadge.emoji} {statusBadge.label}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${emp.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                          {emp.isActive ? 'نشط' : 'معطل'}
                         </span>
                       </div>
-                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-600 rounded-full transition-all duration-500"
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              parseFloat(emp.performance.amountProgressPercent) || 0
-                            )}%`,
-                          }}
-                        />
+                    </div>
+
+                    {/* Progress Bars */}
+                    <div className="space-y-3 pt-2 border-t border-slate-100 text-xs">
+                      {/* Financial Target */}
+                      <div>
+                        <div className="flex justify-between font-bold mb-1">
+                          <span className="text-slate-600">التارجت المالي:</span>
+                          <span className={emp.performance.amountTargetAchieved ? 'text-emerald-600' : 'text-slate-700'}>
+                            {emp.performance.totalSalesAchieved} / {emp.targets.targetAmount || '—'} ج.م
+                            {emp.performance.amountProgressPercent !== 'غير محدد' && (
+                              <span className="text-[10px] mr-1">({emp.performance.amountProgressPercent})</span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              emp.performance.amountTargetAchieved ? 'bg-emerald-500' : 'bg-emerald-400'
+                            }`}
+                            style={{ width: `${Math.min(100, amtPct)}%` }}
+                          />
+                        </div>
+                        {emp.performance.remainingAmount && parseFloat(emp.performance.remainingAmount) > 0 && (
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            باقي {parseFloat(emp.performance.remainingAmount).toLocaleString('ar-EG')} ج.م للتارجت
+                          </p>
+                        )}
+                        {emp.performance.amountTargetAchieved && (
+                          <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                            ✅ تجاوز التارجت بنسبة {(amtPct - 100).toFixed(1)}%
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Orders Target */}
+                      <div>
+                        <div className="flex justify-between font-bold mb-1">
+                          <span className="text-slate-600">تارجت الطلبات:</span>
+                          <span className={emp.performance.ordersTargetAchieved ? 'text-purple-600' : 'text-slate-700'}>
+                            {emp.performance.deliveredOrdersCount} / {emp.targets.targetOrders || '—'} طلب
+                            {emp.performance.ordersProgressPercent !== 'غير محدد' && (
+                              <span className="text-[10px] mr-1">({emp.performance.ordersProgressPercent})</span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              emp.performance.ordersTargetAchieved ? 'bg-purple-500' : 'bg-purple-400'
+                            }`}
+                            style={{ width: `${Math.min(100, ordPct)}%` }}
+                          />
+                        </div>
+                        {emp.performance.remainingOrders > 0 && (
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            باقي {emp.performance.remainingOrders} طلب للتارجت
+                          </p>
+                        )}
+                        {emp.performance.ordersTargetAchieved && (
+                          <p className="text-[10px] text-purple-600 font-bold mt-0.5">
+                            ✅ تجاوز تارجت الطلبات بنسبة {(ordPct - 100).toFixed(1)}%
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    {/* Order Count Target Progress */}
-                    <div>
-                      <div className="flex justify-between font-bold mb-1">
-                        <span className="text-slate-600">تارجت الطلبات المكتملة:</span>
-                        <span className="text-purple-700">
-                          {emp.performance.deliveredOrdersCount} / {emp.targets.targetOrders || 0} طلب (
-                          {emp.performance.ordersProgressPercent})
-                        </span>
+                    {/* Summary Stats */}
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center text-xs">
+                      <div className="p-2 bg-slate-50 rounded-xl">
+                        <div className="text-[10px] text-slate-400">إجمالي المسند</div>
+                        <div className="font-black text-slate-800">{emp.performance.totalAssignedOrders}</div>
                       </div>
-                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-purple-600 rounded-full transition-all duration-500"
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              parseFloat(emp.performance.ordersProgressPercent) || 0
-                            )}%`,
-                          }}
-                        />
+                      <div className="p-2 bg-emerald-50 rounded-xl">
+                        <div className="text-[10px] text-emerald-700">تم التوصيل</div>
+                        <div className="font-black text-emerald-800">{emp.performance.deliveredOrdersCount}</div>
+                      </div>
+                      <div className="p-2 bg-red-50 rounded-xl">
+                        <div className="text-[10px] text-red-700">ملغي</div>
+                        <div className="font-black text-red-800">{emp.performance.cancelledOrdersCount}</div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Summary Stats Footer */}
-                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center text-xs">
-                    <div className="p-2 bg-slate-50 rounded-xl">
-                      <div className="text-[10px] text-slate-400">إجمالي المسند</div>
-                      <div className="font-black text-slate-800">
-                        {emp.performance.totalAssignedOrders}
-                      </div>
-                    </div>
-                    <div className="p-2 bg-emerald-50 rounded-xl">
-                      <div className="text-[10px] text-emerald-700">تم التوصيل</div>
-                      <div className="font-black text-emerald-800">
-                        {emp.performance.deliveredOrdersCount}
-                      </div>
-                    </div>
-                    <div className="p-2 bg-red-50 rounded-xl">
-                      <div className="text-[10px] text-red-700">ملغي</div>
-                      <div className="font-black text-red-800">
-                        {emp.performance.cancelledOrdersCount}
-                      </div>
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        onClick={() => openTasksModal(emp)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-xl text-[11px] font-bold transition-smooth border border-indigo-200"
+                        title="مهام الموظف"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        المهام
+                      </button>
+                      <button
+                        onClick={() => openAdjustmentModal(emp)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-[11px] font-bold transition-smooth border border-amber-200"
+                      >
+                        <Gift className="w-3.5 h-3.5" />
+                        + مكافأة/خصم
+                      </button>
+                      <button
+                        onClick={() => openHistoryModal(emp)}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[11px] font-bold transition-smooth border border-slate-200"
+                        title="سجل المكافآت والخصومات"
+                      >
+                        <History className="w-3.5 h-3.5" />
+                        السجل
+                      </button>
                     </div>
                   </div>
-
-                  {/* ── Action Buttons: Adjustment + History ─────────────── */}
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                    <button
-                      onClick={() => openAdjustmentModal(emp)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-[11px] font-bold transition-smooth border border-amber-200"
-                    >
-                      <Gift className="w-3.5 h-3.5" />
-                      + مكافأة/خصم
-                    </button>
-                    <button
-                      onClick={() => openHistoryModal(emp)}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[11px] font-bold transition-smooth border border-slate-200"
-                      title="سجل المكافآت والخصومات"
-                    >
-                      <History className="w-3.5 h-3.5" />
-                      السجل
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1005,7 +1062,7 @@ export const OwnerView = () => {
           </div>
 
           {/* List of Destinations */}
-          {destLoading ? (
+          {isLoadingDestinations ? (
             <div className="py-20 text-center glass-card rounded-3xl p-6">
               <Loader2 className="w-8 h-8 mx-auto animate-spin text-amber-600 mb-2" />
               <p className="text-xs font-bold text-slate-500">جاري تحميل وسائل الدفع...</p>
@@ -1637,6 +1694,14 @@ export const OwnerView = () => {
           </form>
         </div>
       </Modal>
+
+      {/* ── Modal: Tasks ──────────────────────────────────────────────────── */}
+      <TasksModal
+        isOpen={showTasksModal}
+        onClose={() => setShowTasksModal(false)}
+        employeeId={tasksTarget?.employeeId}
+        employeeName={tasksTarget?.name}
+      />
     </div>
   );
 };

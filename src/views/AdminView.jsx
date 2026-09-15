@@ -7,6 +7,8 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Archive,
+  Calendar,
   Search,
   Plus,
   Edit2,
@@ -327,6 +329,12 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
   const [newPaymentStatus, setNewPaymentStatus] = useState('');
   const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
   const [showDeliveredWarning, setShowDeliveredWarning] = useState(false);
+
+  // Orders Archive Filter States
+  const [archivePeriod, setArchivePeriod] = useState('ALL'); // 'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK' | 'MONTH' | 'CUSTOM'
+  const [archiveCustomStart, setArchiveCustomStart] = useState('');
+  const [archiveCustomEnd, setArchiveCustomEnd] = useState('');
+  const [archiveSearch, setArchiveSearch] = useState('');
 
   // Product Add / Edit Modal
   const [showProductModal, setShowProductModal] = useState(false);
@@ -837,7 +845,29 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
           }`}
         >
           <Layers className="w-4 h-4" />
-          <span>إدارة الطلبات</span>
+          <span>الطلبات النشطة</span>
+          {orders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED').length > 0 && (
+            <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+              {orders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED').length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('orders-archive')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-smooth flex items-center gap-2 whitespace-nowrap ${
+            activeSubTab === 'orders-archive'
+              ? 'bg-purple-700 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Archive className="w-4 h-4" />
+          <span>أرشيف الطلبات المكتملة</span>
+          {orders.filter((o) => o.status === 'DELIVERED' || o.status === 'CANCELLED').length > 0 && (
+            <span className="bg-emerald-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+              {orders.filter((o) => o.status === 'DELIVERED' || o.status === 'CANCELLED').length}
+            </span>
+          )}
         </button>
 
         <button
@@ -921,137 +951,420 @@ export const AdminView = ({ initialSubTab = 'orders' }) => {
         </button>
       </div>
 
-      {/* ── SUB-TAB 1: ORDERS MANAGEMENT ───────────────────────────────────── */}
-      {activeSubTab === 'orders' && (
-        <div className="glass-card rounded-3xl border border-slate-200 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-bold text-sm text-slate-800">
-              قائمة جميع الطلبات بالمنصة ({orders.length})
-            </h3>
-          </div>
+      {/* ── SUB-TAB 1: ACTIVE ORDERS MANAGEMENT ───────────────────────────── */}
+      {activeSubTab === 'orders' && (() => {
+        const activeOrdersList = orders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
+        return (
+          <div className="glass-card rounded-3xl border border-slate-200 overflow-hidden space-y-4">
+            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-purple-600" />
+                  <span>الطلبات النشطة والجارية ({activeOrdersList.length})</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  الطلبات التي تتطلب إجراءات عمل (قيد المراجعة، قيد التجهيز، أو جاري الشحن). تنتقل الطلبات تلقائياً إلى الأرشيف عند اكتمال التسليم.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveSubTab('orders-archive')}
+                className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-bold transition-smooth border border-purple-200"
+              >
+                <Archive className="w-3.5 h-3.5" />
+                <span>فتح أرشيف المكتملة</span>
+              </button>
+            </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-bold">
-                <tr>
-                  <th className="p-3">رقم الطلب</th>
-                  <th className="p-3">العميل</th>
-                  <th className="p-3">النوع</th>
-                  <th className="p-3">طريقة الدفع</th>
-                  <th className="p-3">حالة الطلب</th>
-                  <th className="p-3">حالة الدفع</th>
-                  <th className="p-3">الإجمالي</th>
-                  <th className="p-3">التاريخ</th>
-                  <th className="p-3 text-center">إجراء</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {isLoadingOrders ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <TableRowSkeleton key={i} columns={9} />
-                  ))
-                ) : orders.length === 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-bold">
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-slate-400 font-bold">
-                      لا توجد طلبات مسجلة حالياً
-                    </td>
+                    <th className="p-3">رقم الطلب</th>
+                    <th className="p-3">العميل</th>
+                    <th className="p-3">النوع</th>
+                    <th className="p-3">طريقة الدفع</th>
+                    <th className="p-3">حالة الطلب</th>
+                    <th className="p-3">حالة الدفع</th>
+                    <th className="p-3">الإجمالي</th>
+                    <th className="p-3">التاريخ</th>
+                    <th className="p-3 text-center">إجراء</th>
                   </tr>
-                ) : orders.map((o) => (
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {isLoadingOrders ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRowSkeleton key={i} columns={9} />
+                    ))
+                  ) : activeOrdersList.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="p-12 text-center text-slate-400 font-bold">
+                        <CheckCircle className="w-10 h-10 mx-auto mb-2 text-emerald-500 opacity-60" />
+                        <div>لا توجد طلبات نشطة معلقة حالياً! كل الطلبات تم إنجازها.</div>
+                        <button
+                          onClick={() => setActiveSubTab('orders-archive')}
+                          className="mt-3 text-purple-600 hover:text-purple-700 text-xs font-extrabold underline"
+                        >
+                          تصفح أرشيف الطلبات المكتملة
+                        </button>
+                      </td>
+                    </tr>
+                  ) : activeOrdersList.map((o) => (
                     <tr key={o.id} className="hover:bg-slate-50/80 transition-smooth">
                       <td className="p-3 font-mono font-bold text-slate-900">#{o.orderNumber}</td>
                       <td className="p-3">
                         <div className="font-bold text-slate-800">{o.user?.name}</div>
                         <div className="text-[10px] text-slate-400">{o.user?.email}</div>
                       </td>
-                    <td className="p-3">
-                      <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-semibold text-slate-700">
-                        {o.orderType === 'WHOLESALE' ? 'جملة' : 'قطاعي'}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      {o.paymentMethod === 'CASH_ON_DELIVERY' ? (
-                        <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-full text-[11px] font-extrabold shadow-2xs">
-                          <Banknote className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span>دفع عند الاستلام</span>
+                      <td className="p-3">
+                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-semibold text-slate-700">
+                          {o.orderType === 'WHOLESALE' ? 'جملة' : 'قطاعي'}
                         </span>
-                      ) : o.paymentMethod === 'BANK_TRANSFER' ? (
-                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
-                          <Building2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                          <span>تحويل بنكي</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
-                          <CreditCard className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                          <span>أونلاين</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                          o.status === 'DELIVERED'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : o.status === 'CANCELLED'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {o.status}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                          o.paymentStatus === 'PAID'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : o.paymentStatus === 'FAILED'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {o.paymentStatus === 'PAID'
-                          ? 'مدفوع (PAID)'
-                          : o.paymentStatus === 'FAILED'
-                          ? 'فشل (FAILED)'
-                          : 'معلق (PENDING)'}
-                      </span>
-                    </td>
-                    <td className="p-3 font-black text-emerald-700">{o.totalAmount} ج.م</td>
-                    <td className="p-3 text-slate-500 text-[11px]">
-                      {new Date(o.createdAt).toLocaleDateString('ar-EG')}
-                    </td>
-                    <td className="p-3 text-center">
-                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                        {o.paymentMethod === 'CASH_ON_DELIVERY' && o.paymentStatus !== 'PAID' && (
-                          <button
-                            onClick={() => handleMarkPaymentStatus(o.id, 'PAID')}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-smooth flex items-center gap-1 shadow-2xs"
-                            title="تأكيد تحصيل المبلغ نقداً واعتماد الدفع كـ PAID"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            <span>تحصيل نقدي</span>
-                          </button>
+                      </td>
+                      <td className="p-3">
+                        {o.paymentMethod === 'CASH_ON_DELIVERY' ? (
+                          <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-full text-[11px] font-extrabold shadow-2xs">
+                            <Banknote className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>دفع عند الاستلام</span>
+                          </span>
+                        ) : o.paymentMethod === 'BANK_TRANSFER' ? (
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                            <Building2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span>تحويل بنكي</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                            <CreditCard className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                            <span>أونلاين</span>
+                          </span>
                         )}
-                        <button
-                          onClick={() => {
-                            setStatusModalOrder(o);
-                            setNewOrderStatus(o.status);
-                            setNewPaymentStatus(o.paymentStatus);
-                            setShowDeliveredWarning(false);
-                          }}
-                          className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg text-xs font-bold transition-smooth"
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                            o.status === 'DELIVERED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : o.status === 'CANCELLED'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
                         >
-                          تعديل الحالة
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          {o.status}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                            o.paymentStatus === 'PAID'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : o.paymentStatus === 'FAILED'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {o.paymentStatus === 'PAID'
+                            ? 'مدفوع (PAID)'
+                            : o.paymentStatus === 'FAILED'
+                            ? 'فشل (FAILED)'
+                            : 'معلق (PENDING)'}
+                        </span>
+                      </td>
+                      <td className="p-3 font-black text-emerald-700">{o.totalAmount} ج.م</td>
+                      <td className="p-3 text-slate-500 text-[11px]">
+                        {new Date(o.createdAt).toLocaleDateString('ar-EG')}
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                          {o.paymentMethod === 'CASH_ON_DELIVERY' && o.paymentStatus !== 'PAID' && (
+                            <button
+                              onClick={() => handleMarkPaymentStatus(o.id, 'PAID')}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-smooth flex items-center gap-1 shadow-2xs"
+                              title="تأكيد تحصيل المبلغ نقداً واعتماد الدفع كـ PAID"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              <span>تحصيل نقدي</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setStatusModalOrder(o);
+                              setNewOrderStatus(o.status);
+                              setNewPaymentStatus(o.paymentStatus);
+                              setShowDeliveredWarning(false);
+                            }}
+                            className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg text-xs font-bold transition-smooth"
+                          >
+                            تعديل الحالة
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* ── SUB-TAB 1.5: COMPLETED ORDERS ARCHIVE ───────────────────────────── */}
+      {activeSubTab === 'orders-archive' && (() => {
+        const completedRaw = orders.filter((o) => o.status === 'DELIVERED' || o.status === 'CANCELLED');
+
+        // Apply Time and Search Filters
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfYesterday = new Date(startOfToday);
+        startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+        const endOfYesterday = new Date(startOfToday.getTime() - 1);
+
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        const filteredArchive = completedRaw.filter((o) => {
+          const orderDate = new Date(o.updatedAt || o.createdAt);
+
+          // Period Filter
+          if (archivePeriod === 'TODAY' && orderDate < startOfToday) return false;
+          if (archivePeriod === 'YESTERDAY' && (orderDate < startOfYesterday || orderDate > endOfYesterday)) return false;
+          if (archivePeriod === 'WEEK' && orderDate < oneWeekAgo) return false;
+          if (archivePeriod === 'MONTH' && orderDate < oneMonthAgo) return false;
+          if (archivePeriod === 'CUSTOM') {
+            if (archiveCustomStart && orderDate < new Date(archiveCustomStart)) return false;
+            if (archiveCustomEnd) {
+              const endLimit = new Date(archiveCustomEnd);
+              endLimit.setHours(23, 59, 59, 999);
+              if (orderDate > endLimit) return false;
+            }
+          }
+
+          // Search Filter
+          if (archiveSearch.trim()) {
+            const q = archiveSearch.toLowerCase();
+            const num = (o.orderNumber || '').toLowerCase();
+            const name = (o.user?.name || '').toLowerCase();
+            const email = (o.user?.email || '').toLowerCase();
+            const phone = (o.user?.phone || '').toLowerCase();
+            if (!num.includes(q) && !name.includes(q) && !email.includes(q) && !phone.includes(q)) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+
+        // Totals of filtered archive
+        const deliveredTotalRevenue = filteredArchive
+          .filter((o) => o.status === 'DELIVERED')
+          .reduce((sum, o) => sum + parseFloat(o.totalAmount || 0), 0);
+
+        return (
+          <div className="space-y-4">
+            {/* Archive Header & Filters Bar */}
+            <div className="glass-card p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                    <Archive className="w-5 h-5 text-emerald-600" />
+                    <span>أرشيف الطلبات المكتملة والمنتهية</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      {filteredArchive.length} طلب
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    سجل شامل لجميع الطلبات المسلّمة والملغاة مع تواريخ الإتمام الدقيقة وإمكانية البحث والفرز الزمني.
+                  </p>
+                </div>
+
+                {/* Quick Summary Badge */}
+                <div className="flex items-center gap-3 bg-emerald-50/80 border border-emerald-200 px-4 py-2 rounded-2xl">
+                  <div>
+                    <div className="text-[10px] text-emerald-700 font-bold">إجمالي مبيعات الأرشيف المعروض</div>
+                    <div className="text-sm font-black text-emerald-900">
+                      {deliveredTotalRevenue.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} ج.م
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filters Controls */}
+              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
+                <span className="text-xs font-bold text-slate-600 flex items-center gap-1 ml-1">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  الفترة الزمنية:
+                </span>
+
+                {[
+                  { id: 'ALL', label: 'الكل' },
+                  { id: 'TODAY', label: 'اليوم' },
+                  { id: 'YESTERDAY', label: 'الأمس' },
+                  { id: 'WEEK', label: 'آخر 7 أيام' },
+                  { id: 'MONTH', label: 'آخر 30 يوم' },
+                  { id: 'CUSTOM', label: 'تاريخ مخصص' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setArchivePeriod(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-smooth ${
+                      archivePeriod === tab.id
+                        ? 'bg-purple-700 text-white shadow-xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+
+                {/* Search Box */}
+                <div className="flex-1 min-w-[200px] relative mr-auto">
+                  <input
+                    type="text"
+                    placeholder="بحث برقم الطلب، العميل، الهاتف..."
+                    value={archiveSearch}
+                    onChange={(e) => setArchiveSearch(e.target.value)}
+                    className="w-full pl-3 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Custom Date Inputs (if CUSTOM selected) */}
+              {archivePeriod === 'CUSTOM' && (
+                <div className="flex items-center gap-3 pt-2 bg-purple-50/50 p-3 rounded-2xl border border-purple-100 text-xs">
+                  <span className="font-bold text-purple-900">من تاريخ:</span>
+                  <input
+                    type="date"
+                    value={archiveCustomStart}
+                    onChange={(e) => setArchiveCustomStart(e.target.value)}
+                    className="px-2.5 py-1 bg-white border border-purple-200 rounded-lg outline-none"
+                  />
+                  <span className="font-bold text-purple-900">إلى تاريخ:</span>
+                  <input
+                    type="date"
+                    value={archiveCustomEnd}
+                    onChange={(e) => setArchiveCustomEnd(e.target.value)}
+                    className="px-2.5 py-1 bg-white border border-purple-200 rounded-lg outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Archive Table */}
+            <div className="glass-card rounded-3xl border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-bold">
+                    <tr>
+                      <th className="p-3">رقم الطلب</th>
+                      <th className="p-3">العميل</th>
+                      <th className="p-3">النوع</th>
+                      <th className="p-3">طريقة الدفع</th>
+                      <th className="p-3">الحالة النهائية</th>
+                      <th className="p-3">حالة الدفع</th>
+                      <th className="p-3">الإجمالي</th>
+                      <th className="p-3">تاريخ الإتمام والتسليم</th>
+                      <th className="p-3 text-center">تفاصيل / إجراء</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {isLoadingOrders ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <TableRowSkeleton key={i} columns={9} />
+                      ))
+                    ) : filteredArchive.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="p-12 text-center text-slate-400 font-bold">
+                          <Archive className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+                          <div>لا توجد طلبات مطابقة للفترة المحددة في الأرشيف</div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredArchive.map((o) => (
+                        <tr key={o.id} className="hover:bg-slate-50/80 transition-smooth">
+                          <td className="p-3 font-mono font-bold text-slate-900">#{o.orderNumber}</td>
+                          <td className="p-3">
+                            <div className="font-bold text-slate-800">{o.user?.name}</div>
+                            <div className="text-[10px] text-slate-400">{o.user?.phone || o.user?.email}</div>
+                          </td>
+                          <td className="p-3">
+                            <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-semibold text-slate-700">
+                              {o.orderType === 'WHOLESALE' ? 'جملة' : 'قطاعي'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            {o.paymentMethod === 'CASH_ON_DELIVERY' ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-[11px]">
+                                <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>دفع استلام</span>
+                              </span>
+                            ) : o.paymentMethod === 'BANK_TRANSFER' ? (
+                              <span className="inline-flex items-center gap-1 text-amber-700 font-bold text-[11px]">
+                                <Building2 className="w-3.5 h-3.5 text-amber-600" />
+                                <span>تحويل بنكي</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-blue-700 font-bold text-[11px]">
+                                <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+                                <span>أونلاين</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                o.status === 'DELIVERED'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {o.status === 'DELIVERED' ? 'تم التسليم بنجاح' : 'ملغي'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                o.paymentStatus === 'PAID'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {o.paymentStatus === 'PAID' ? 'مدفوع' : 'معلق'}
+                            </span>
+                          </td>
+                          <td className="p-3 font-black text-emerald-700">{o.totalAmount} ج.م</td>
+                          <td className="p-3 text-slate-600 text-[11px]">
+                            <div className="font-bold">
+                              {new Date(o.updatedAt || o.createdAt).toLocaleDateString('ar-EG')}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              {new Date(o.updatedAt || o.createdAt).toLocaleTimeString('ar-EG', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </div>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => {
+                                setStatusModalOrder(o);
+                                setNewOrderStatus(o.status);
+                                setNewPaymentStatus(o.paymentStatus);
+                                setShowDeliveredWarning(false);
+                              }}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-smooth"
+                            >
+                              مراجعة / تعديل
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── SUB-TAB 2: BANK RECEIPTS REVIEW ────────────────────────────────── */}
       {activeSubTab === 'receipts' && (

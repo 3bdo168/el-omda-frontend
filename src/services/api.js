@@ -154,6 +154,18 @@ export const api = {
     updateEmployee: (id, data) => request(`/api/owner/employees/${id}`, { method: 'PUT', body: data }),
     createAdjustment: (id, data) => request(`/api/owner/employees/${id}/adjustments`, { method: 'POST', body: data }),
     getEmployeeAdjustments: (id) => request(`/api/owner/employees/${id}/adjustments`),
+    createTask: (employeeId, data) => request(`/api/owner/employees/${employeeId}/tasks`, { method: 'POST', body: data }),
+    getEmployeeTasks: (employeeId) => request(`/api/owner/employees/${employeeId}/tasks`),
+    updateTask: (employeeId, taskId, data) => request(`/api/owner/employees/${employeeId}/tasks/${taskId}`, { method: 'PUT', body: data }),
+    deleteTask: (employeeId, taskId) => request(`/api/owner/employees/${employeeId}/tasks/${taskId}`, { method: 'DELETE' }),
+  },
+
+  // Employee actions
+  employee: {
+    skipTurn: () => request('/api/employees/skip-turn', { method: 'POST' }),
+    getMyDashboard: () => request('/api/employees/my-dashboard'),
+    getMyTasks: () => request('/api/employees/my-tasks'),
+    updateTaskStatus: (taskId, status) => request(`/api/employees/tasks/${taskId}/status`, { method: 'PATCH', body: { status } }),
   },
 };
 

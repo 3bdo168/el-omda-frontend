@@ -10,6 +10,7 @@ import { StoreView } from './views/StoreView';
 import { OrdersView } from './views/OrdersView';
 import { AdminView } from './views/AdminView';
 import { OwnerView } from './views/OwnerView';
+import { EmployeeView } from './views/EmployeeView';
 
 const MainApp = () => {
   const { isAuthenticated, role } = useAuth();
@@ -22,9 +23,9 @@ const MainApp = () => {
 
   // If user logs out or lacks permissions, redirect to store
   useEffect(() => {
-    if (!isAuthenticated && (activeTab === 'orders' || activeTab === 'admin' || activeTab === 'owner')) {
+    if (!isAuthenticated && (activeTab === 'orders' || activeTab === 'admin' || activeTab === 'owner' || activeTab === 'employee')) {
       setActiveTab('store');
-    } else if (isAuthenticated && role === 'CUSTOMER' && (activeTab === 'admin' || activeTab === 'owner')) {
+    } else if (isAuthenticated && role === 'CUSTOMER' && (activeTab === 'admin' || activeTab === 'owner' || activeTab === 'employee')) {
       setActiveTab('store');
     }
   }, [isAuthenticated, role, activeTab]);
@@ -35,6 +36,8 @@ const MainApp = () => {
       setActiveTab('admin');
     } else if (authUser?.role === 'OWNER') {
       setActiveTab('owner');
+    } else if (authUser?.role === 'EMPLOYEE') {
+      setActiveTab('employee');
     }
   };
 
@@ -99,6 +102,7 @@ const MainApp = () => {
         {activeTab === 'orders' && <OrdersView initialSelectedOrderId={targetOrderId} />}
         {activeTab === 'admin' && <AdminView initialSubTab={initialAdminTab} />}
         {activeTab === 'owner' && <OwnerView />}
+        {activeTab === 'employee' && <EmployeeView />}
       </main>
 
       {/* Cart Drawer */}
