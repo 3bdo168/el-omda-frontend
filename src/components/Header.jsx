@@ -4,6 +4,7 @@ import {
   ShoppingBag,
   Bell,
   User,
+  UserRound,
   LogOut,
   ShieldAlert,
   Crown,
@@ -23,12 +24,76 @@ import {
   AlertTriangle,
   UserCheck,
   Briefcase,
+  Search,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useNotifications } from '../context/NotificationContext';
 
-export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNotificationNavigate }) => {
+export const NAV_CONFIG = [
+  {
+    id: 'store',
+    label: 'المتجر والمنتجات',
+    mobileLabel: 'المتجر والمنتجات',
+    icon: LayoutGrid,
+    requireAuth: false,
+    allowedRoles: ['*'],
+    activeClassDesktop: 'header-nav-pill--active',
+    activeClassMobile: 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25',
+    inactiveClassMobile: 'bg-slate-50 text-slate-700 hover:bg-slate-100',
+    arrowColorMobile: 'text-slate-400',
+  },
+  {
+    id: 'orders',
+    label: 'سجل طلباتي',
+    mobileLabel: 'سجل طلباتي',
+    icon: ClipboardList,
+    requireAuth: true,
+    allowedRoles: ['CUSTOMER', 'TRADER', 'ADMIN', 'OWNER', 'EMPLOYEE'],
+    activeClassDesktop: 'header-nav-pill--active',
+    activeClassMobile: 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25',
+    inactiveClassMobile: 'bg-slate-50 text-slate-700 hover:bg-slate-100',
+    arrowColorMobile: 'text-slate-400',
+  },
+  {
+    id: 'admin',
+    label: 'لوحة الأدمن',
+    mobileLabel: 'لوحة تحكم الأدمن',
+    icon: SlidersHorizontal,
+    requireAuth: true,
+    allowedRoles: ['ADMIN', 'OWNER'],
+    activeClassDesktop: 'header-nav-pill--active-purple',
+    activeClassMobile: 'bg-purple-700 text-white shadow-md shadow-purple-700/25',
+    inactiveClassMobile: 'bg-purple-50/60 text-purple-800 hover:bg-purple-50',
+    arrowColorMobile: 'text-purple-400',
+  },
+  {
+    id: 'owner',
+    label: 'لوحة المالك',
+    mobileLabel: 'لوحة تحكم المالك',
+    icon: Crown,
+    requireAuth: true,
+    allowedRoles: ['OWNER'],
+    activeClassDesktop: 'header-nav-pill--active-amber',
+    activeClassMobile: 'bg-amber-600 text-white shadow-md shadow-amber-600/25',
+    inactiveClassMobile: 'bg-amber-50/60 text-amber-800 hover:bg-amber-50',
+    arrowColorMobile: 'text-amber-400',
+  },
+  {
+    id: 'employee',
+    label: 'لوحة الموظف',
+    mobileLabel: 'لوحة الموظف',
+    icon: Briefcase,
+    requireAuth: true,
+    allowedRoles: ['EMPLOYEE'], // Strictly EMPLOYEE only. OWNER is completely excluded.
+    activeClassDesktop: 'header-nav-pill--active-indigo',
+    activeClassMobile: 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25',
+    inactiveClassMobile: 'bg-indigo-50/60 text-indigo-800 hover:bg-indigo-50',
+    arrowColorMobile: 'text-indigo-400',
+  },
+];
+
+export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNotificationNavigate, onOpenSearch }) => {
   const { user, isAuthenticated, role, isTrader, logout, switchRole } = useAuth();
   const { totalCount } = useCart();
   const { unreadCount, notifications, markAsRead, markAllAsRead } = useNotifications();
@@ -61,9 +126,25 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showMobileRoleOptions, setShowMobileRoleOptions] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [accountMenuMounted, setAccountMenuMounted] = useState(false);
 
   const notificationsRef = useRef(null);
   const roleMenuRef = useRef(null);
+  const accountMenuRef = useRef(null);
+
+  useEffect(() => {
+    setShowAccountMenu(false);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (showAccountMenu) {
+      setAccountMenuMounted(true);
+      return undefined;
+    }
+    const timer = setTimeout(() => setAccountMenuMounted(false), 180);
+    return () => clearTimeout(timer);
+  }, [showAccountMenu]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -73,6 +154,9 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
       }
       if (roleMenuRef.current && !roleMenuRef.current.contains(event.target)) {
         setShowRoleMenu(false);
+      }
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target)) {
+        setShowAccountMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -124,8 +208,14 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
 
   const roleInfo = getRoleLabel();
 
+  const visibleNavItems = NAV_CONFIG.filter((item) => {
+    if (item.requireAuth && !isAuthenticated) return false;
+    if (!item.allowedRoles || item.allowedRoles.includes('*')) return true;
+    return item.allowedRoles.includes(role);
+  });
+
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs select-none">
+    <header className="sticky top-0 z-40 liquid-glass-bar--header select-none">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Right in RTL: Logo & Brand Name */}
@@ -142,10 +232,10 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                 <div className="flex items-center gap-2">
                   <span className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-tight flex items-baseline gap-1.5">
                     بيت الجملة
-                    <span className="text-[10px] sm:text-[11px] font-normal text-slate-500 whitespace-nowrap">تبع مؤسسه صلى على النبى</span>
+                    <span className="hidden min-[440px]:inline text-[10px] sm:text-[11px] font-normal text-slate-500 whitespace-nowrap">تبع مؤسسه صلى على النبى</span>
                   </span>
-                  {/* Badge hidden on mobile (< 640px), visible on sm+ */}
-                  <span className="hidden sm:inline-flex items-center text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 whitespace-nowrap">
+                  {/* Badge hidden on mobile (<640px) and tablet (<1024px), visible on lg+ */}
+                  <span className="hidden lg:inline-flex items-center text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 whitespace-nowrap">
                     B2B & B2C
                   </span>
                 </div>
@@ -155,75 +245,22 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
               </div>
             </button>
 
-            {/* Desktop Navigation Links */}
-            <nav className="hidden md:flex items-center gap-1.5 mr-2">
-              <button
-                onClick={() => handleNavClick('store')}
-                className={`px-4 py-2 rounded-xl text-sm font-bold transition-smooth flex items-center gap-2 ${
-                  activeTab === 'store'
-                    ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-                المتجر والمنتجات
-              </button>
-
-              {isAuthenticated && (
-                <button
-                  onClick={() => handleNavClick('orders')}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-smooth flex items-center gap-2 ${
-                    activeTab === 'orders'
-                      ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <ClipboardList className="w-4 h-4" />
-                  سجل طلباتي
-                </button>
-              )}
-
-              {(role === 'ADMIN' || role === 'OWNER') && (
-                <button
-                  onClick={() => handleNavClick('admin')}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-smooth flex items-center gap-2 ${
-                    activeTab === 'admin'
-                      ? 'bg-purple-700 text-white shadow-sm shadow-purple-700/30'
-                      : 'text-purple-700 hover:bg-purple-50'
-                  }`}
-                >
-                  <SlidersHorizontal className="w-4 h-4" />
-                  لوحة الأدمن
-                </button>
-              )}
-
-              {role === 'OWNER' && (
-                <button
-                  onClick={() => handleNavClick('owner')}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-smooth flex items-center gap-2 ${
-                    activeTab === 'owner'
-                      ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
-                      : 'text-amber-700 hover:bg-amber-50'
-                  }`}
-                >
-                  <Crown className="w-4 h-4" />
-                  لوحة المالك
-                </button>
-              )}
-              
-              {(role === 'EMPLOYEE' || role === 'OWNER') && (
-                <button
-                  onClick={() => handleNavClick('employee')}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-smooth flex items-center gap-2 ${
-                    activeTab === 'employee'
-                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                      : 'text-indigo-700 hover:bg-indigo-50'
-                  }`}
-                >
-                  <Briefcase className="w-4 h-4" />
-                  لوحة الموظف
-                </button>
-              )}
+            {/* Desktop Navigation Links — Liquid Glass Pills */}
+            <nav className="hidden xl:flex items-center gap-1.5 mr-2">
+              {visibleNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavClick(item.id)}
+                    className={`header-nav-pill ${isActive ? item.activeClassDesktop : ''}`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {item.label}
+                  </button>
+                );
+              })}
             </nav>
           </div>
 
@@ -231,7 +268,7 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Quick Role Switcher for OWNER (Desktop) */}
             {isAuthenticated && role === 'OWNER' && (
-              <div className="relative hidden sm:block" ref={roleMenuRef}>
+              <div className="relative hidden xl:block" ref={roleMenuRef}>
                 <button
                   onClick={() => setShowRoleMenu(!showRoleMenu)}
                   className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-smooth min-h-[44px]"
@@ -309,8 +346,39 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
               </div>
             )}
 
+            {/* Account shortcut remains visible on every viewport */}
+            <div className="relative order-3" ref={accountMenuRef}>
+              {isAuthenticated ? (
+                <>
+                  <button type="button" onClick={() => setShowAccountMenu((open) => !open)} aria-label="حسابي" aria-expanded={showAccountMenu} className="flex h-11 w-11 min-w-[44px] items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-800 transition-smooth hover:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-teal-500 text-sm font-black text-white">{user?.name?.trim()?.charAt(0) || 'م'}</span>
+                  </button>
+                  {accountMenuMounted && <div className={`absolute left-0 top-full z-[60] mt-2 w-52 origin-top-left rounded-2xl border border-slate-200 bg-white p-2 text-right shadow-xl transition-all duration-150 ${showAccountMenu ? 'translate-y-0 scale-100 opacity-100' : '-translate-y-1 scale-95 opacity-0 pointer-events-none'}`}>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2"><div className="text-[10px] font-bold text-slate-400">حسابي</div><div className="truncate text-sm font-extrabold text-slate-900">{user?.name || 'المستخدم'}</div></div>
+                    <button type="button" onClick={() => { setShowAccountMenu(false); handleNavClick('orders'); }} className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-sm font-bold text-slate-700 transition-colors hover:bg-emerald-50"><ClipboardList className="h-4 w-4 text-emerald-700" />طلباتي</button>
+                    <button type="button" onClick={() => { setShowAccountMenu(false); logout(); }} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-sm font-bold text-red-700 transition-colors hover:bg-red-50"><LogOut className="h-4 w-4" />تسجيل الخروج</button>
+                  </div>}
+                </>
+              ) : (
+                <button type="button" onClick={onOpenAuth} aria-label="تسجيل الدخول" title="تسجيل الدخول" className="flex h-11 w-11 min-w-[44px] items-center justify-center rounded-2xl bg-slate-100 text-slate-700 transition-smooth hover:bg-emerald-100 hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><UserRound className="h-5 w-5" /></button>
+              )}
+            </div>
+
+            {/* Search Button for Mobile */}
+            {onOpenSearch && (
+              <button
+                type="button"
+                onClick={onOpenSearch}
+                className="relative order-1 xl:hidden w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 flex items-center justify-center transition-smooth active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                title="البحث في المنتجات"
+                aria-label="البحث في المنتجات"
+              >
+                <Search className="w-5 h-5 text-slate-700" />
+              </button>
+            )}
+
             {/* Notification Bell Button matching mockup: rounded-2xl, 44x44, slate-100, red circular badge */}
-            <div className="relative" ref={notificationsRef}>
+            <div className="relative order-2" ref={notificationsRef}>
               <button
                 onClick={() => {
                   setShowNotifications(!showNotifications);
@@ -361,7 +429,7 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                     )}
                   </div>
 
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                  <div className="max-h-[55vh] sm:max-h-80 overflow-y-auto divide-y divide-slate-100">
                     {!isAuthenticated ? (
                       <div className="py-8 px-4 text-center">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-3">
@@ -422,7 +490,7 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                                 </span>
                               </div>
                             </div>
-                            <span className="text-[10px] text-emerald-700 font-bold opacity-0 group-hover:opacity-100 transition-smooth flex items-center gap-0.5 shrink-0">
+                            <span className="text-[10px] text-emerald-700 font-bold sm:opacity-0 sm:group-hover:opacity-100 transition-smooth flex items-center gap-0.5 shrink-0">
                               <span>التفاصيل</span>
                               <ChevronLeft className="w-3 h-3" />
                             </span>
@@ -441,12 +509,12 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
             {/* Cart Button matching mockup: solid emerald squircle button with badge counter */}
             <button
               onClick={onOpenCart}
-              className="relative w-11 h-11 sm:w-auto sm:px-4 min-w-[44px] min-h-[44px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white flex items-center justify-center gap-2 transition-smooth active:scale-95 shadow-md shadow-emerald-600/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              className="relative order-4 w-11 h-11 sm:w-auto sm:px-4 min-w-[44px] min-h-[44px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white flex items-center justify-center gap-2 transition-smooth active:scale-95 shadow-md shadow-emerald-600/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               title="سلة المشتريات"
               aria-label="سلة المشتريات"
             >
               <ShoppingBag className="w-5 h-5 text-white shrink-0" />
-              <span className="hidden sm:inline font-bold text-sm">السلة</span>
+              <span className="hidden xl:inline font-bold text-sm">السلة</span>
               {totalCount > 0 && (
                 <span className="absolute -top-1 -right-1 sm:static sm:mr-1 min-w-[20px] h-5 px-1 bg-emerald-900 text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-white sm:ring-0 shadow-xs">
                   {totalCount}
@@ -454,42 +522,13 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
               )}
             </button>
 
-            {/* Desktop Auth Action */}
-            {isAuthenticated ? (
-              <div className="hidden md:flex items-center gap-2 pr-2 border-r border-slate-200">
-                <div className="text-left">
-                  <p className="text-xs font-extrabold text-slate-900 leading-tight">{user?.name || 'المستخدم'}</p>
-                  <span
-                    className={`inline-block text-[10px] font-bold px-2 py-0.2 rounded-full border ${roleInfo.color}`}
-                  >
-                    {roleInfo.shortLabel}
-                  </span>
-                </div>
-                <button
-                  onClick={logout}
-                  className="min-w-[36px] min-h-[36px] p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-smooth flex items-center justify-center"
-                  title="تسجيل الخروج"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={onOpenAuth}
-                className="hidden md:flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-smooth shadow-sm min-h-[44px]"
-              >
-                <User className="w-4 h-4" />
-                تسجيل الدخول
-              </button>
-            )}
-
             {/* Mobile Hamburger Menu Toggle Button matching mockup: rounded-2xl slate-100 */}
             <button
               onClick={() => {
                 setMobileMenuOpen(!mobileMenuOpen);
                 setShowNotifications(false);
               }}
-              className="md:hidden relative w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 flex items-center justify-center transition-smooth active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              className="xl:hidden relative order-5 w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 flex items-center justify-center transition-smooth active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               title={mobileMenuOpen ? 'إغلاق القائمة' : 'القائمة الرئيسية'}
               aria-label={mobileMenuOpen ? 'إغلاق القائمة' : 'القائمة الرئيسية'}
               aria-expanded={mobileMenuOpen}
@@ -511,13 +550,13 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
           <>
             {/* Backdrop with Blur covering full screen */}
             <div
-              className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-[998] md:hidden animate-fade-in"
+              className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-[998] xl:hidden animate-fade-in"
               onClick={() => setMobileMenuOpen(false)}
             />
 
-            {/* Complete Right-side Full Sidebar without scroll */}
+            {/* Complete Right-side Full Sidebar with scroll support */}
             <aside
-              className="fixed inset-y-0 right-0 w-[82%] max-w-[320px] sm:max-w-[350px] h-screen h-dvh bg-white shadow-2xl z-[999] md:hidden flex flex-col justify-between p-4 sm:p-5 border-l border-slate-200/90 animate-slide-in-right overflow-hidden select-none"
+              className="fixed inset-y-0 right-0 w-[82%] max-w-[320px] sm:max-w-[350px] h-screen h-dvh bg-white shadow-2xl z-[999] xl:hidden flex flex-col justify-between p-4 sm:p-5 border-l border-slate-200/90 animate-slide-in-right overflow-y-auto overscroll-contain select-none"
               aria-label="القائمة الجانبية"
             >
               {/* Top Section: Header & Nav Links */}
@@ -548,95 +587,27 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                   </button>
                 </div>
 
-                {/* Navigation Items List matching mockup */}
+                {/* Navigation Items List matching single nav config */}
                 <div className="space-y-1.5 pt-1">
-                  {/* 1. المتجر والمنتجات */}
-                  <button
-                    onClick={() => handleNavClick('store')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-smooth ${
-                      activeTab === 'store'
-                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
-                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                      <span>المتجر والمنتجات</span>
-                    </div>
-                    <ChevronLeft className={`w-4 h-4 shrink-0 ${activeTab === 'store' ? 'text-white' : 'text-slate-400'}`} />
-                  </button>
-
-                  {/* 2. سجل طلباتي */}
-                  {isAuthenticated && (
-                    <button
-                      onClick={() => handleNavClick('orders')}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-smooth ${
-                        activeTab === 'orders'
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
-                          : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <ClipboardList className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                        <span>سجل طلباتي</span>
-                      </div>
-                      <ChevronLeft className={`w-4 h-4 shrink-0 ${activeTab === 'orders' ? 'text-white' : 'text-slate-400'}`} />
-                    </button>
-                  )}
-
-                  {/* 3. لوحة تحكم الأدمن */}
-                  {(role === 'ADMIN' || role === 'OWNER') && (
-                    <button
-                      onClick={() => handleNavClick('admin')}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-smooth ${
-                        activeTab === 'admin'
-                          ? 'bg-purple-700 text-white shadow-md shadow-purple-700/25'
-                          : 'bg-purple-50/60 text-purple-800 hover:bg-purple-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <SlidersHorizontal className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                        <span>لوحة تحكم الأدمن</span>
-                      </div>
-                      <ChevronLeft className={`w-4 h-4 shrink-0 ${activeTab === 'admin' ? 'text-white' : 'text-purple-400'}`} />
-                    </button>
-                  )}
-
-                  {/* 4. لوحة تحكم المالك */}
-                  {role === 'OWNER' && (
-                    <button
-                      onClick={() => handleNavClick('owner')}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-smooth ${
-                        activeTab === 'owner'
-                          ? 'bg-amber-600 text-white shadow-md shadow-amber-600/25'
-                          : 'bg-amber-50/60 text-amber-800 hover:bg-amber-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Crown className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                        <span>لوحة تحكم المالك</span>
-                      </div>
-                      <ChevronLeft className={`w-4 h-4 shrink-0 ${activeTab === 'owner' ? 'text-white' : 'text-amber-400'}`} />
-                    </button>
-                  )}
-
-                  {/* 5. لوحة الموظف */}
-                  {(role === 'EMPLOYEE' || role === 'OWNER') && (
-                    <button
-                      onClick={() => handleNavClick('employee')}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-smooth ${
-                        activeTab === 'employee'
-                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                          : 'bg-indigo-50/60 text-indigo-800 hover:bg-indigo-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Briefcase className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                        <span>لوحة الموظف</span>
-                      </div>
-                      <ChevronLeft className={`w-4 h-4 shrink-0 ${activeTab === 'employee' ? 'text-white' : 'text-indigo-400'}`} />
-                    </button>
-                  )}
+                  {visibleNavItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => handleNavClick(item.id)}
+                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-smooth ${
+                          isActive ? item.activeClassMobile : item.inactiveClassMobile
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Icon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                          <span>{item.mobileLabel || item.label}</span>
+                        </div>
+                        <ChevronLeft className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : (item.arrowColorMobile || 'text-slate-400')}`} />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

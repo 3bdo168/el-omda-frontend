@@ -13,6 +13,7 @@ import {
   Copy,
   Check,
   Loader2,
+  MapPin,
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -21,7 +22,7 @@ import { useNotifications } from '../context/NotificationContext';
 import { Modal } from './Modal';
 
 export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
-  const { items, totalAmount, subtotal, discountAmount, appliedCoupon, clearCart } = useCart();
+  const { items, subtotal, discountAmount, appliedCoupon, clearCart } = useCart();
   const { user, isAuthenticated } = useAuth();
   const { refreshNotifications } = useNotifications();
   const queryClient = useQueryClient();
@@ -30,6 +31,45 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdOrder, setCreatedOrder] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [deliveryDetails, setDeliveryDetails] = useState({
+    name: user?.name || '', phone: user?.phone || '', street: '', building: '', floor: '', apartment: '', notes: '', zoneId: '',
+  });
+
+  const { data: deliveryZones = [], isLoading: loadingZones, isError: zonesError } = useQuery({
+    queryKey: ['delivery-zones'],
+    queryFn: async () => {
+      const res = await api.getDeliveryZones();
+      return res.success && Array.isArray(res.data) ? res.data : [];
+    },
+    enabled: isOpen,
+  });
+  const { data: previousOrder } = useQuery({
+    queryKey: ['my-orders', 'delivery-prefill'],
+    queryFn: async () => {
+      const res = await api.getMyOrders(1);
+      return res.data?.[0] || null;
+    },
+    enabled: isOpen && isAuthenticated,
+  });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setDeliveryDetails((current) => ({
+      ...current,
+      name: current.name || user?.name || previousOrder?.customerName || previousOrder?.user?.name || '',
+      phone: current.phone || user?.phone || previousOrder?.phone || '',
+      street: current.street || previousOrder?.deliveryAddress?.replace(/^الشارع:\s*/, '').split('،')[0] || '',
+    }));
+  }, [isOpen, user?.name, user?.phone, previousOrder]);
+
+  const selectedZone = deliveryZones.find((zone) => zone.id === deliveryDetails.zoneId);
+  const deliveryFee = Number(selectedZone?.fee || 0);
+  const checkoutTotal = Math.max(0, subtotal - discountAmount) + deliveryFee;
+  const validEgyptianPhone = /^(?:\+?20|0)?1[0125]\d{8}$/.test(deliveryDetails.phone.replace(/[\s()-]/g, ''));
+  const deliveryValid = Boolean(
+    deliveryDetails.name.trim() && validEgyptianPhone && deliveryDetails.street.trim()
+    && deliveryDetails.building.trim() && deliveryDetails.zoneId && selectedZone
+  );
 
   // Payment Destinations via React Query
   const {
@@ -94,6 +134,16 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
         })),
         couponCode: appliedCoupon?.code || undefined,
         paymentMethod,
+        customer_name: deliveryDetails.name.trim(),
+        phone: deliveryDetails.phone.trim(),
+        delivery_address: [
+          `الشارع: ${deliveryDetails.street.trim()}`,
+          `المبنى: ${deliveryDetails.building.trim()}`,
+          deliveryDetails.floor.trim() ? `الدور: ${deliveryDetails.floor.trim()}` : '',
+          deliveryDetails.apartment.trim() ? `الشقة: ${deliveryDetails.apartment.trim()}` : '',
+          deliveryDetails.notes.trim() ? `ملاحظات: ${deliveryDetails.notes.trim()}` : '',
+        ].filter(Boolean).join('، '),
+        delivery_zone_id: deliveryDetails.zoneId,
       };
 
       const res = await api.createOrder(payload);
@@ -181,6 +231,30 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
 
           {!createdOrder ? (
             <div className="space-y-5">
+              <section className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><MapPin className="h-4 w-4 text-emerald-700" />بيانات التوصيل</h4>
+                  {(user?.name || previousOrder?.customerName) && <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-800">✓ بياناتك اتملت تلقائياً</span>}
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <label className="text-xs font-bold text-slate-700">الاسم بالكامل *<input value={deliveryDetails.name} onChange={(e) => setDeliveryDetails({ ...deliveryDetails, name: e.target.value })} autoComplete="name" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-normal" /></label>
+                  <label className="text-xs font-bold text-slate-700">رقم الهاتف المصري *<input value={deliveryDetails.phone} onChange={(e) => setDeliveryDetails({ ...deliveryDetails, phone: e.target.value })} inputMode="tel" autoComplete="tel" placeholder="01xxxxxxxxx" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-normal" /></label>
+                  <label className="text-xs font-bold text-slate-700 sm:col-span-2">الشارع والعنوان بالتفصيل *<input value={deliveryDetails.street} onChange={(e) => setDeliveryDetails({ ...deliveryDetails, street: e.target.value })} autoComplete="street-address" placeholder="اسم الشارع، المنطقة أو علامة مميزة" className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-normal" /></label>
+                  <label className="text-xs font-bold text-slate-700">رقم المبنى *<input value={deliveryDetails.building} onChange={(e) => setDeliveryDetails({ ...deliveryDetails, building: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-normal" /></label>
+                  <label className="text-xs font-bold text-slate-700">الدور<input value={deliveryDetails.floor} onChange={(e) => setDeliveryDetails({ ...deliveryDetails, floor: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-normal" /></label>
+                  <label className="text-xs font-bold text-slate-700">الشقة<input value={deliveryDetails.apartment} onChange={(e) => setDeliveryDetails({ ...deliveryDetails, apartment: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-normal" /></label>
+                  <label className="text-xs font-bold text-slate-700 sm:col-span-2">منطقة التوصيل *
+                    <select value={deliveryDetails.zoneId} onChange={(e) => setDeliveryDetails({ ...deliveryDetails, zoneId: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-normal" disabled={loadingZones || deliveryZones.length === 0}>
+                      <option value="">{loadingZones ? 'جاري تحميل المناطق...' : 'اختر المنطقة'}</option>
+                      {deliveryZones.map((zone) => <option key={zone.id} value={zone.id}>{zone.nameAr} – {Number(zone.fee).toFixed(2)} ج.م</option>)}
+                    </select>
+                  </label>
+                  <label className="text-xs font-bold text-slate-700 sm:col-span-2">ملاحظات للمندوب (اختياري)<textarea rows="2" value={deliveryDetails.notes} onChange={(e) => setDeliveryDetails({ ...deliveryDetails, notes: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-normal" /></label>
+                </div>
+                {zonesError && <p className="text-xs text-red-700">تعذر تحميل مناطق التوصيل. حاول تحديث الصفحة.</p>}
+                {!loadingZones && deliveryZones.length === 0 && <p className="text-xs text-amber-700">لا توجد مناطق توصيل متاحة حالياً.</p>}
+                {deliveryDetails.phone && !validEgyptianPhone && <p className="text-xs text-red-600">أدخل رقم هاتف مصري صحيحاً.</p>}
+              </section>
               {/* Order Summary */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 text-xs">
                 <div className="flex justify-between text-slate-600">
@@ -197,9 +271,10 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
                     <span>- {discountAmount.toFixed(2)} ج.م</span>
                   </div>
                 )}
+                <div className="flex justify-between text-slate-600"><span>التوصيل{selectedZone ? ` (${selectedZone.nameAr})` : ''}:</span><span className="font-bold text-slate-800">{deliveryFee.toFixed(2)} ج.م</span></div>
                 <div className="flex justify-between text-sm font-extrabold text-slate-900 pt-2 border-t border-slate-200">
                   <span>المبلغ الإجمالي المطلوب:</span>
-                  <span className="text-emerald-700 font-black">{totalAmount.toFixed(2)} ج.م</span>
+                  <span className="text-emerald-700 font-black">{checkoutTotal.toFixed(2)} ج.م</span>
                 </div>
               </div>
 
@@ -279,7 +354,7 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
                     الدفع نقداً عند استلام الطلب:
                   </div>
                   <p className="text-[11px] leading-relaxed">
-                    - يتم سداد كامل المبلغ <strong>({totalAmount.toFixed(2)} ج.م)</strong> نقداً لمندوب الشحن عند وصول الطلب إليك.
+                    - يتم سداد كامل المبلغ <strong>({checkoutTotal.toFixed(2)} ج.م)</strong> نقداً لمندوب الشحن عند وصول الطلب إليك.
                   </p>
                   <p className="text-[10px] text-emerald-700 pt-1 border-t border-emerald-200">
                     * لا حاجة لأي تحويل مسبق أو إرفاق إيصالات بنكية.
@@ -368,7 +443,7 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
 
               {/* Submit Button */}
               <button
-                disabled={isSubmitting}
+                disabled={isSubmitting || !deliveryValid}
                 onClick={handleCreateOrder}
                 className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-sm shadow-lg shadow-emerald-600/25 transition-smooth flex items-center justify-center gap-2 disabled:opacity-50"
               >
@@ -376,7 +451,7 @@ export const CheckoutModal = ({ isOpen, onClose, onSuccessOrder }) => {
                   <span>جاري إنشاء الطلب...</span>
                 ) : (
                   <>
-                    <span>تأكيد إنشاء الطلب ({totalAmount.toFixed(2)} ج.م)</span>
+                    <span>تأكيد إنشاء الطلب ({checkoutTotal.toFixed(2)} ج.م)</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}

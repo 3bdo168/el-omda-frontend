@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Search,
@@ -18,29 +19,108 @@ import {
   ExternalLink,
   X,
   RefreshCw,
+  LayoutGrid,
+  ChevronLeft,
+  ChevronRight,
+  Package,
+  FilterX,
 } from 'lucide-react';
 import { api, getImageUrl } from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/Modal';
 import { ProductCardSkeleton } from '../components/Skeleton';
+import { SearchSuggestions } from '../components/SearchSuggestions';
+import { CategoryScrollBar } from '../components/CategoryScrollBar';
 
-export const StoreView = ({ onOpenCart }) => {
+/** Reusable spring-animated sliding indicator that follows the active tab */
+const SlidingIndicator = ({ containerRef, activeSelector, variant = 'emerald' }) => {
+  const [style, setStyle] = useState({ left: 0, width: 0, opacity: 0 });
+
+  useEffect(() => {
+    const update = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      const activeEl = container.querySelector(activeSelector);
+      if (!activeEl) {
+        setStyle((s) => ({ ...s, opacity: 0 }));
+        return;
+      }
+      const containerRect = container.getBoundingClientRect();
+      const activeRect = activeEl.getBoundingClientRect();
+      setStyle({
+        left: activeRect.left - containerRect.left + container.scrollLeft,
+        width: activeRect.width,
+        opacity: 1,
+      });
+    };
+    update();
+    // Re-calc on scroll
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('scroll', update, { passive: true });
+      window.addEventListener('resize', update);
+    }
+    return () => {
+      if (container) {
+        container.removeEventListener('scroll', update);
+        window.removeEventListener('resize', update);
+      }
+    };
+  }, [containerRef, activeSelector]);
+
+  return (
+    <div
+      className={`liquid-indicator liquid-indicator--${variant}`}
+      style={style}
+    />
+  );
+};
+
+export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpen }) => {
   const { addToCart, items } = useCart();
   const { user, isTrader, isApprovedTrader } = useAuth();
 
+  // Read initial search query from URL
+  const getInitialQuery = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('q') || '';
+    } catch { return ''; }
+  };
+
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [activeSearchQuery, setActiveSearchQuery] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState(getInitialQuery);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [selectedProductDetails, setSelectedProductDetails] = useState(null);
   const [modalQty, setModalQty] = useState(1);
   const [justAddedFeedback, setJustAddedFeedback] = useState(false);
+  const [showCategorySheet, setShowCategorySheet] = useState(false);
+  const [internalMobileSearch, setInternalMobileSearch] = useState(false);
+
+  const showMobileSearch = isMobileSearchOpen !== undefined ? isMobileSearchOpen : internalMobileSearch;
+  const setShowMobileSearch = setIsMobileSearchOpen || setInternalMobileSearch;
+
+  // Refs
+  const productsGridRef = useRef(null);
+  const catSheetListRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   // Local quantity map for inputs
   const [qtyMap, setQtyMap] = useState({});
 
-  // Fetch Categories using React Query (default 60s staleTime)
+  // Sync search query to URL
+  useEffect(() => {
+    const url = new URL(window.location);
+    if (activeSearchQuery) {
+      url.searchParams.set('q', activeSearchQuery);
+    } else {
+      url.searchParams.delete('q');
+    }
+    window.history.replaceState({}, '', url);
+  }, [activeSearchQuery]);
+
+  // Fetch Categories using React Query
   const { data: categories = [] } = useQuery({
     queryKey: ['categories', 'store'],
     queryFn: async () => {
@@ -54,7 +134,7 @@ export const StoreView = ({ onOpenCart }) => {
     },
   });
 
-  // Fetch Products using React Query with short staleTime (10s) for real-time stock & pricing
+  // Fetch Products
   const {
     data: products = [],
     isLoading: isLoadingProducts,
@@ -73,7 +153,7 @@ export const StoreView = ({ onOpenCart }) => {
       }
       return [];
     },
-    staleTime: 10 * 1000, // 10 seconds for real-time stock and pricing
+    staleTime: 10 * 1000,
   });
 
   const calculateEffectivePrice = (product, quantity) => {
@@ -111,10 +191,18 @@ export const StoreView = ({ onOpenCart }) => {
     setSelectedProductDetails(product);
   };
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    setActiveSearchQuery(searchInput.trim());
-  };
+  const handleSearch = useCallback((query) => {
+    setActiveSearchQuery(query);
+  }, []);
+
+  const handleSelectProduct = useCallback((product) => {
+    openProductDetails(product);
+  }, []);
+
+  const handleSelectCategory = useCallback((categoryId) => {
+    setSelectedCategory(categoryId);
+    scrollToProducts();
+  }, []);
 
   const handleQtyChange = (productId, val, minQty) => {
     const num = parseInt(val, 10);
@@ -129,16 +217,68 @@ export const StoreView = ({ onOpenCart }) => {
     return qtyMap[product.id] || minQty;
   };
 
+  // Auto-scroll to products grid when category changes
+  const scrollToProducts = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (productsGridRef.current) {
+        productsGridRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }, []);
+
+  // Handle category selection from the bottom sheet
+  const handleSheetCategorySelect = useCallback((catId) => {
+    setSelectedCategory(catId);
+    setShowCategorySheet(false);
+    setTimeout(() => scrollToProducts(), 150);
+  }, [scrollToProducts]);
+
+  // Handle category selection from the top bar chips
+  const handleBarCategorySelect = useCallback((catId) => {
+    setSelectedCategory(catId);
+    scrollToProducts();
+  }, [scrollToProducts]);
+
+  // Lock body scroll for sheets
+  useEffect(() => {
+    if (showCategorySheet) {
+      document.body.style.overflow = 'hidden';
+      if (catSheetListRef.current) {
+        catSheetListRef.current.scrollTop = 0;
+      }
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showCategorySheet]);
+
+  // Check if any filter is active
+  const hasActiveFilters = activeSearchQuery || selectedCategory || inStockOnly;
+
+  const clearAllFilters = useCallback(() => {
+    setActiveSearchQuery('');
+    setSelectedCategory('');
+    setInStockOnly(false);
+  }, []);
+
+  // Total product count text
+  const resultCountText = useMemo(() => {
+    if (isLoadingProducts) return '';
+    return `${products.length} منتج`;
+  }, [products.length, isLoadingProducts]);
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-8 animate-fade-in">
       {/* Hero Banner */}
-      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-950 text-white p-8 sm:p-12 shadow-2xl shadow-emerald-950/20">
+      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-950 text-white p-6 sm:p-8 md:p-12 shadow-2xl shadow-emerald-950/20">
         <div className="relative z-10 max-w-2xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold">
             <Sparkles className="w-3.5 h-3.5" />
             <span>بوابة التوريد والتجارة الذكية</span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-tight">
             مستودعات بيت الجملة <span className="text-sm font-normal text-emerald-200/80 whitespace-nowrap">تبع مؤسسه صلى على النبى</span> لتجارة الجملة والتجزئة
           </h2>
           <p className="text-sm text-emerald-100/90 leading-relaxed">
@@ -161,70 +301,57 @@ export const StoreView = ({ onOpenCart }) => {
         <div className="absolute -left-12 -bottom-12 w-96 h-96 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none" />
       </div>
 
-      {/* Filters & Search Bar */}
-      <div className="glass-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
-        {/* Categories Chips */}
-        <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 scrollbar-none">
+      {/* ─── Search & Filter Section ─── */}
+      <div className="store-search-sticky space-y-3">
+        {/* Search Field (Desktop & Mobile) */}
+        <SearchSuggestions
+          products={products}
+          categories={categories}
+          onSearch={handleSearch}
+          onSelectProduct={handleSelectProduct}
+          onSelectCategory={handleSelectCategory}
+          initialQuery={activeSearchQuery}
+          className="w-full"
+        />
+
+        {/* Filter Row: In-stock toggle + Result count + Clear button */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* In-stock chip toggle */}
           <button
-            onClick={() => setSelectedCategory('')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-smooth ${
-              selectedCategory === ''
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-            }`}
+            type="button"
+            onClick={() => setInStockOnly((v) => !v)}
+            className={`stock-toggle-chip ${inStockOnly ? 'stock-toggle-chip--active' : ''}`}
+            aria-pressed={inStockOnly}
           >
-            جميع الأقسام
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-smooth ${
-                selectedCategory === cat.id
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-            >
-              {cat.name} ({cat._count?.products || 0})
-            </button>
-          ))}
-        </div>
-
-        {/* Search & Stock Toggle */}
-        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-          <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={inStockOnly}
-              onChange={(e) => setInStockOnly(e.target.checked)}
-              className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
-            />
+            <Package className="w-3.5 h-3.5" />
             <span>المتوفر بالمخزن فقط</span>
-          </label>
+            {inStockOnly && <Check className="w-3 h-3" />}
+          </button>
 
-          <form onSubmit={handleSearchSubmit} className="relative w-full md:w-64">
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value);
-                if (!e.target.value.trim()) setActiveSearchQuery('');
-              }}
-              placeholder="ابحث بالاسم أو كود SKU..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 pl-9 text-xs focus:outline-none focus:border-emerald-500 font-medium"
-            />
+          {/* Result count */}
+          {resultCountText && (
+            <span className="text-xs font-bold text-slate-500 px-2 py-1 bg-slate-100 rounded-lg">
+              {resultCountText}
+            </span>
+          )}
+
+          {/* Clear all filters */}
+          {hasActiveFilters && (
             <button
-              type="submit"
-              className="absolute left-2.5 top-2.5 text-slate-400 hover:text-emerald-600 transition-smooth"
+              type="button"
+              onClick={clearAllFilters}
+              className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-red-50 transition-smooth"
             >
-              <Search className="w-4 h-4" />
+              <FilterX className="w-3.5 h-3.5" />
+              <span>مسح الفلاتر</span>
             </button>
-          </form>
+          )}
 
+          {/* Background refresh indicator */}
           {isFetchingProducts && !isLoadingProducts && (
             <div
               title="جاري تحديث الأسعار والمخزون في الخلفية..."
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold animate-pulse"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50/80 text-emerald-700 border border-emerald-200/50 rounded-full text-[10px] font-bold animate-pulse backdrop-blur-sm mr-auto"
             >
               <RefreshCw className="w-3 h-3 animate-spin text-emerald-600" />
               <span>تحديث فوري</span>
@@ -233,7 +360,157 @@ export const StoreView = ({ onOpenCart }) => {
         </div>
       </div>
 
+      {/* ─── Categories Bar with Arrow Buttons ─── */}
+      <div className="liquid-glass-bar liquid-glass-bar--emerald p-2.5 sm:p-3 rounded-[20px] relative z-10">
+        <CategoryScrollBar
+          categories={categories}
+          selectedCategory={selectedCategory}
+          onSelect={handleBarCategorySelect}
+          onOpenSheet={() => setShowCategorySheet(true)}
+        />
+      </div>
+
+      {/* Category Bottom Sheet — List Style (rendered via Portal) */}
+      {showCategorySheet &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs z-[9998] animate-fade-in"
+              onClick={() => setShowCategorySheet(false)}
+            />
+            {/* Sheet */}
+            <div className="fixed bottom-0 left-0 right-0 z-[9999] animate-slide-up-sheet">
+              <div className="bg-white rounded-t-3xl shadow-2xl border-t border-slate-200 max-h-[85vh] flex flex-col">
+                {/* Handle */}
+                <div className="flex justify-center pt-3 pb-1 shrink-0">
+                  <div className="w-12 h-1.5 rounded-full bg-slate-200" />
+                </div>
+                {/* Header — Sticky */}
+                <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <LayoutGrid className="w-5 h-5 text-emerald-600" />
+                    <h3 className="font-black text-slate-900 text-sm">أقسام المنتجات</h3>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">{categories.length + 1} قسم</span>
+                  </div>
+                  <button
+                    onClick={() => setShowCategorySheet(false)}
+                    className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-smooth"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                {/* Categories List — Scrollable */}
+                <div ref={catSheetListRef} className="p-4 space-y-2 pb-8 overflow-y-auto flex-1 overscroll-contain">
+                  {/* All Categories */}
+                  <button
+                    data-sheet-active={selectedCategory === '' ? 'true' : undefined}
+                    onClick={() => handleSheetCategorySelect('')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-right transition-smooth ${
+                      selectedCategory === ''
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                        : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:border-emerald-200'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      selectedCategory === '' ? 'bg-white/20' : 'bg-emerald-100'
+                    }`}>
+                      <LayoutGrid className={`w-5 h-5 ${selectedCategory === '' ? 'text-white' : 'text-emerald-600'}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className={`font-bold text-sm leading-tight ${selectedCategory === '' ? 'text-white' : 'text-slate-900'}`}>جميع الأقسام</div>
+                      <div className={`text-[11px] mt-0.5 ${selectedCategory === '' ? 'text-emerald-100' : 'text-slate-400'}`}>
+                        {categories.reduce((s, c) => s + (c._count?.products || 0), 0)} منتج
+                      </div>
+                    </div>
+                  </button>
+
+                  {categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      data-sheet-active={selectedCategory === cat.id ? 'true' : undefined}
+                      onClick={() => handleSheetCategorySelect(cat.id)}
+                      className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-right transition-smooth ${
+                        selectedCategory === cat.id
+                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                          : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:border-emerald-200'
+                      }`}
+                    >
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        selectedCategory === cat.id ? 'bg-white/20' : 'bg-slate-100'
+                      }`}>
+                        <Tag className={`w-5 h-5 ${selectedCategory === cat.id ? 'text-white' : 'text-slate-500'}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className={`font-bold text-sm leading-tight ${selectedCategory === cat.id ? 'text-white' : 'text-slate-900'}`}>{cat.name}</div>
+                        <div className={`text-[11px] mt-0.5 ${selectedCategory === cat.id ? 'text-emerald-100' : 'text-slate-400'}`}>
+                          {cat._count?.products || 0} منتج
+                        </div>
+                      </div>
+                      {selectedCategory === cat.id && (
+                        <span className="text-[11px] font-black px-2 py-1 rounded-full bg-white/25 text-white shrink-0">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+
+      {/* ─── Mobile Search Overlay ─── */}
+      {showMobileSearch &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs z-[9998] animate-fade-in"
+              onClick={() => setShowMobileSearch(false)}
+            />
+            <div className="fixed top-0 left-0 right-0 z-[9999] animate-search-overlay">
+              <div className="bg-white p-4 shadow-2xl border-b border-slate-200 safe-area-inset-top">
+                <div className="flex items-center gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowMobileSearch(false)}
+                    className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-smooth shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <h3 className="font-bold text-sm text-slate-900">البحث في المنتجات</h3>
+                </div>
+                <SearchSuggestions
+                  products={products}
+                  categories={categories}
+                  onSearch={(q) => {
+                    handleSearch(q);
+                    setShowMobileSearch(false);
+                  }}
+                  onSelectProduct={(p) => {
+                    handleSelectProduct(p);
+                    setShowMobileSearch(false);
+                  }}
+                  onSelectCategory={(id) => {
+                    handleSelectCategory(id);
+                    setShowMobileSearch(false);
+                  }}
+                  initialQuery={activeSearchQuery}
+                  variant="mobile-overlay"
+                  autoFocus
+                  onClose={() => setShowMobileSearch(false)}
+                />
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
+
       {/* Products Grid */}
+      <div ref={productsGridRef}>
       {isLoadingProducts ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -245,6 +522,15 @@ export const StoreView = ({ onOpenCart }) => {
           <ShoppingBag className="w-16 h-16 stroke-[1.2] mx-auto mb-3 text-slate-300" />
           <h3 className="font-extrabold text-base text-slate-700">لا توجد منتجات مطابقة</h3>
           <p className="text-xs text-slate-400 mt-1">جرب تغيير معايير البحث أو اختيار قسم آخر</p>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-smooth"
+            >
+              مسح جميع الفلاتر
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -420,6 +706,7 @@ export const StoreView = ({ onOpenCart }) => {
           })}
         </div>
       )}
+      </div>
 
       {/* ── PRODUCT DETAILS & IMAGE EXPANDED MODAL ──────────────────────── */}
       <Modal
@@ -588,8 +875,8 @@ export const StoreView = ({ onOpenCart }) => {
                   {!isOutOfStock && (
                     <div className="space-y-3 pt-1">
                       <label className="block text-xs font-bold text-slate-700">حدد الكمية المطلوبة:</label>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center border-2 border-slate-200 rounded-2xl bg-slate-50 p-1">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                        <div className="flex items-center justify-between sm:justify-start border-2 border-slate-200 rounded-2xl bg-slate-50 p-1">
                           <button
                             type="button"
                             disabled={modalQty <= minQty}

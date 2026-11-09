@@ -82,6 +82,14 @@ export const AuthProvider = ({ children }) => {
     saveAuth(null, null);
   };
 
+  const updateUser = (updatedUserData) => {
+    setUser((prev) => {
+      const merged = { ...prev, ...updatedUserData };
+      setStoredUser(merged);
+      return merged;
+    });
+  };
+
   /**
    * Secure role switcher — calls the protected backend endpoint.
    * Only works when the current user's JWT belongs to an OWNER.
@@ -121,6 +129,7 @@ export const AuthProvider = ({ children }) => {
         login,
         register,
         logout,
+        updateUser,
         switchRole,
       }}
     >

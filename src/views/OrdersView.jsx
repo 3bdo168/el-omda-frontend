@@ -153,7 +153,7 @@ export const OrdersView = ({ initialSelectedOrderId = null }) => {
                 {/* Order Top Bar */}
                 <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       <span className="font-extrabold text-sm text-slate-900 font-mono">
                         #{order.orderNumber}
                       </span>
@@ -168,7 +168,7 @@ export const OrdersView = ({ initialSelectedOrderId = null }) => {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-4 text-xs text-slate-500">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                       <span>
                         📅 {new Date(order.createdAt).toLocaleDateString('ar-EG', {
                           year: 'numeric',
@@ -359,31 +359,31 @@ export const OrdersView = ({ initialSelectedOrderId = null }) => {
                     <h4 className="text-xs font-bold text-slate-800">تفاصيل المنتجات في الطلب:</h4>
                     <div className="divide-y divide-slate-100 text-xs">
                       {order.items?.map((item) => (
-                        <div key={item.id} className="py-2.5 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-sm">
+                        <div key={item.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 last:border-0">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-sm shrink-0">
                               📦
                             </div>
-                            <div>
-                              <div className="font-bold text-slate-900">
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 truncate">
                                 {item.product?.name || 'منتج غير محدد'}
                               </div>
-                              <div className="text-[11px] text-slate-500">
+                              <div className="text-[11px] text-slate-500 font-mono">
                                 كود SKU: {item.product?.sku}
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-6 text-slate-700">
+                          <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-6 text-slate-700 w-full sm:w-auto bg-slate-50 sm:bg-transparent p-2.5 sm:p-0 rounded-xl">
                             <div>
-                              <span className="text-slate-400">الكمية: </span>
-                              <span className="font-bold">{item.quantity}</span>
+                              <span className="text-slate-400 text-[11px]">الكمية: </span>
+                              <span className="font-bold text-xs">{item.quantity}</span>
                             </div>
                             <div>
-                              <span className="text-slate-400">سعر الوحدة: </span>
-                              <span className="font-bold">{item.unitPrice} ج.م</span>
+                              <span className="text-slate-400 text-[11px]">سعر الوحدة: </span>
+                              <span className="font-bold text-xs">{item.unitPrice} ج.م</span>
                             </div>
-                            <div className="font-extrabold text-slate-900 w-24 text-left">
+                            <div className="font-extrabold text-slate-900 text-xs sm:w-24 text-left whitespace-nowrap">
                               {item.totalPrice} ج.م
                             </div>
                           </div>
@@ -392,18 +392,25 @@ export const OrdersView = ({ initialSelectedOrderId = null }) => {
                     </div>
 
                     {/* Order Cost Breakdown */}
-                    <div className="pt-3 border-t border-slate-200 flex flex-col items-end gap-1 text-xs text-slate-600">
-                      <div className="flex justify-between w-48">
+                    <div className="pt-3 border-t border-slate-200 flex flex-col items-stretch sm:items-end gap-1.5 text-xs text-slate-600">
+                      {(order.deliveryAddress || order.deliveryZoneName) && <div className="mb-2 w-full rounded-xl bg-emerald-50 p-3 text-right text-xs text-emerald-950 sm:w-80">
+                        <div className="font-extrabold">بيانات التوصيل</div>
+                        <div className="mt-1">الاسم: {order.customerName || order.user?.name || '—'} · الهاتف: {order.phone || '—'}</div>
+                        <div className="mt-1">العنوان: {order.deliveryAddress || '—'}</div>
+                        <div className="mt-1">المنطقة: {order.deliveryZoneName || '—'} · رسوم التوصيل: {Number(order.deliveryFee || 0).toFixed(2)} ج.م</div>
+                      </div>}
+                      <div className="flex justify-between w-full sm:w-60">
                         <span>المجموع الفرعي:</span>
                         <span className="font-bold">{order.subtotal} ج.م</span>
                       </div>
                       {parseFloat(order.discountAmount) > 0 && (
-                        <div className="flex justify-between w-48 text-emerald-700 font-bold">
+                        <div className="flex justify-between w-full sm:w-60 text-emerald-700 font-bold">
                           <span>الخصم الممنوح:</span>
                           <span>- {order.discountAmount} ج.م</span>
                         </div>
                       )}
-                      <div className="flex justify-between w-48 text-sm font-extrabold text-slate-900 pt-1 border-t border-slate-200">
+                      {Number(order.deliveryFee || 0) > 0 && <div className="flex justify-between w-full sm:w-60"><span>التوصيل ({order.deliveryZoneName || '—'}):</span><span className="font-bold">{Number(order.deliveryFee).toFixed(2)} ج.م</span></div>}
+                      <div className="flex justify-between w-full sm:w-60 text-sm font-extrabold text-slate-900 pt-1 border-t border-slate-200">
                         <span>الإجمالي:</span>
                         <span className="text-emerald-700">{order.totalAmount} ج.م</span>
                       </div>

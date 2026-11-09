@@ -93,12 +93,15 @@ export const api = {
   },
   register: (userData) => request('/api/auth/register', { method: 'POST', body: userData }),
   getMe: () => request('/api/auth/me'),
+  changePassword: (data) => request('/api/auth/change-password', { method: 'POST', body: data }),
   switchRole: (targetRole) => request('/api/auth/switch-role', { method: 'POST', body: { targetRole } }),
 
   // Store & Products
   getProducts: (params = '') => request(`/api/products?${params}`),
   getProductById: (id) => request(`/api/products/${id}`),
   getCategories: () => request('/api/products/categories'),
+  suggestProducts: (query, signal) => request(`/api/products/suggest?q=${encodeURIComponent(query)}`, { signal }),
+  getDeliveryZones: () => request('/api/delivery-zones'),
 
   // Orders
   createOrder: (orderData) => request('/api/orders', { method: 'POST', body: orderData }),
@@ -113,6 +116,10 @@ export const api = {
 
   // Admin APIs
   admin: {
+    getDeliveryZones: () => request('/api/admin/delivery-zones'),
+    createDeliveryZone: (data) => request('/api/admin/delivery-zones', { method: 'POST', body: data }),
+    updateDeliveryZone: (id, data) => request(`/api/admin/delivery-zones/${id}`, { method: 'PATCH', body: data }),
+    deleteDeliveryZone: (id) => request(`/api/admin/delivery-zones/${id}`, { method: 'DELETE' }),
     getOrders: (params = '') => request(`/api/admin/orders?${params}`),
     getOrderById: (id) => request(`/api/admin/orders/${id}`),
     updateOrderStatus: (id, status) => request(`/api/admin/orders/${id}/status`, { method: 'PATCH', body: { status } }),
@@ -146,6 +153,13 @@ export const api = {
 
   // Owner Reports & Employee Management
   owner: {
+    // Team Management
+    getTeamMembers: () => request('/api/owner/team'),
+    createTeamMember: (data) => request('/api/owner/team', { method: 'POST', body: data }),
+    updateTeamMember: (id, data) => request(`/api/owner/team/${id}`, { method: 'PATCH', body: data }),
+    toggleMemberStatus: (id, isActive) => request(`/api/owner/team/${id}/status`, { method: 'PATCH', body: { isActive } }),
+    resetMemberPassword: (id, password) => request(`/api/owner/team/${id}/reset-password`, { method: 'POST', body: { password } }),
+
     getFinancialReport: (params = '') => request(`/api/owner/reports/financial?${params}`),
     getEmployeePerformance: (params = '') => request(`/api/owner/reports/employees?${params}`),
     getProductPerformance: (params = '') => request(`/api/owner/reports/products?${params}`),
