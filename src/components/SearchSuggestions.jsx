@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, X, Loader2, Tag, Clock, ArrowLeft } from 'lucide-react';
-import { normalizeArabic, scoreMatch, highlightMatch } from '../utils/arabicSearch';
+import { normalizeArabic, scoreMatch } from '../utils/arabicSearch';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
+import { HighlightText } from './HighlightText';
 import { api, getImageUrl } from '../services/api';
 
 const RECENT_SEARCHES_KEY = 'elomda_recent_searches';
 const MAX_RECENT = 5;
-const DEBOUNCE_MS = 200;
 
 function getRecentSearches() {
   try {
@@ -28,23 +29,6 @@ function clearRecentSearches() {
   localStorage.removeItem(RECENT_SEARCHES_KEY);
 }
 
-const HighlightedText = ({ text, query }) => {
-  const segments = highlightMatch(text, query);
-  return (
-    <>
-      {segments.map((seg, i) =>
-        seg.highlighted ? (
-          <mark key={i} className="bg-emerald-100 text-emerald-900 rounded-sm px-0.5 font-extrabold" style={{ textDecoration: 'none' }}>
-            {seg.text}
-          </mark>
-        ) : (
-          <span key={i}>{seg.text}</span>
-        )
-      )}
-    </>
-  );
-};
-
 /**
  * SearchSuggestions — Full-featured search input with live suggestions dropdown.
  * Uses portal for dropdown to avoid overflow clipping issues.
@@ -62,8 +46,14 @@ export const SearchSuggestions = ({
   autoFocus = false,
   onClose,
 }) => {
-  const [query, setQuery] = useState(initialQuery);
-  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
+  const {
+    value: query,
+    debouncedValue: rawDebouncedQuery,
+    setValue: setQuery,
+    clear: clearSearchInput,
+  } = useDebouncedSearch(initialQuery, 300);
+  const debouncedQuery = rawDebouncedQuery.trim();
+
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -75,22 +65,15 @@ export const SearchSuggestions = ({
   const dropdownRef = useRef(null);
   const wrapperRef = useRef(null);
   const abortRef = useRef(null);
-  const debounceRef = useRef(null);
 
   // Sync with external initialQuery changes
   useEffect(() => {
-    setQuery(initialQuery);
-    setDebouncedQuery(initialQuery);
-  }, [initialQuery]);
-
-  // Debounce input
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setDebouncedQuery(query.trim());
-    }, DEBOUNCE_MS);
-    return () => clearTimeout(debounceRef.current);
-  }, [query]);
+    if (!initialQuery) {
+      clearSearchInput();
+    } else {
+      setQuery(initialQuery);
+    }
+  }, [initialQuery, setQuery, clearSearchInput]);
 
   // Update portal position
   const updatePosition = useCallback(() => {
@@ -284,7 +267,7 @@ export const SearchSuggestions = ({
         handleSubmit();
       }
     },
-    [activeIndex, totalItems, isOpen, showRecent, recentSearches, results, handleSubmit, handleSelectProduct, handleSelectCategory, onClose]
+    [activeIndex, totalItems, isOpen, showRecent, recentSearches, results, setQuery, handleSubmit, handleSelectProduct, handleSelectCategory, onClose]
   );
 
   useEffect(() => {
@@ -295,8 +278,7 @@ export const SearchSuggestions = ({
   }, [activeIndex]);
 
   const handleClear = () => {
-    setQuery('');
-    setDebouncedQuery('');
+    clearSearchInput();
     onSearch?.('');
     inputRef.current?.focus();
   };
@@ -381,7 +363,7 @@ export const SearchSuggestions = ({
                       </div>
                       <div className="flex-1 min-w-0 text-right">
                         <div className="text-xs font-bold text-slate-900 truncate">
-                          <HighlightedText text={cat.name} query={debouncedQuery} />
+                          <HighlightText text={cat.name} query={debouncedQuery} variant="emerald" />
                         </div>
                         <div className="text-[10px] text-slate-400">{cat._count?.products || 0} منتج</div>
                       </div>
@@ -418,14 +400,24 @@ export const SearchSuggestions = ({
                       </div>
                       <div className="flex-1 min-w-0 text-right">
                         <div className="text-xs font-bold text-slate-900 truncate">
-                          <HighlightedText text={product.name} query={debouncedQuery} />
+                          <HighlightText text={product.name} query={debouncedQuery} variant="emerald" />
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400 mt-0.5">
                           <span className="font-bold text-emerald-700">{parseFloat(product.retailPrice).toFixed(2)} ج.م</span>
                           {product.category?.name && (
                             <>
                               <span className="text-slate-300">|</span>
-                              <span>{product.category.name}</span>
+                              <span>
+                                <HighlightText text={product.category.name} query={debouncedQuery} variant="emerald" />
+                              </span>
+                            </>
+                          )}
+                          {product.sku && (
+                            <>
+                              <span className="text-slate-300">|</span>
+                              <span className="font-mono">
+                                <HighlightText text={product.sku} query={debouncedQuery} variant="emerald" />
+                              </span>
                             </>
                           )}
                         </div>
@@ -475,11 +467,12 @@ export const SearchSuggestions = ({
   ) : null;
 
   return (
-    <div ref={wrapperRef} className={`relative ${className}`}>
+    <div ref={wrapperRef} dir="rtl" className={`relative min-w-0 ${className}`}>
       <div className="relative">
         <input
           ref={inputRef}
           type="text"
+          dir="rtl"
           value={query}
           onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
           onFocus={() => { setIsOpen(true); setRecentSearches(getRecentSearches()); updatePosition(); }}
@@ -492,28 +485,36 @@ export const SearchSuggestions = ({
           aria-activedescendant={activeIndex >= 0 ? `suggestion-${activeIndex}` : undefined}
           aria-autocomplete="list"
           aria-label="البحث في المنتجات"
-          className={`w-full bg-white/80 backdrop-blur-sm border border-slate-200/60 rounded-xl py-2.5 text-sm font-medium focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-smooth placeholder:text-slate-400 ${
-            variant === 'mobile-overlay' ? 'pr-4 pl-20 text-base py-3' : 'pr-10 pl-10'
+          className={`w-full min-w-0 bg-white/80 backdrop-blur-sm border border-slate-200/60 rounded-2xl py-2.5 text-sm font-medium focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-smooth placeholder:text-slate-400 ${
+            variant === 'mobile-overlay'
+              ? 'pr-4 pl-28 text-base py-3'
+              : isLoading && debouncedQuery
+                ? 'pr-10 pl-16'
+                : 'pr-10 pl-10'
           } ${inputClassName}`}
         />
 
         {variant !== 'mobile-overlay' && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
             <Search className="w-4 h-4" />
           </div>
         )}
 
-        <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+        <div
+          className={`absolute top-1/2 -translate-y-1/2 flex items-center gap-1 ${
+            variant === 'mobile-overlay' ? 'left-16' : 'left-2.5'
+          }`}
+        >
           {isLoading && debouncedQuery && <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />}
           {query && (
-            <button type="button" onClick={handleClear} className="w-6 h-6 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-smooth" aria-label="مسح البحث">
+            <button type="button" onClick={handleClear} className="w-6 h-6 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-smooth" aria-label="مسح البحث" title="مسح البحث">
               <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
 
         {variant === 'mobile-overlay' && (
-          <button type="button" onClick={() => handleSubmit()} className="absolute left-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-smooth">
+          <button type="button" onClick={() => handleSubmit()} className="absolute left-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-smooth">
             بحث
           </button>
         )}

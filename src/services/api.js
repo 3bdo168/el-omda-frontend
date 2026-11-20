@@ -103,6 +103,10 @@ export const api = {
   suggestProducts: (query, signal) => request(`/api/products/suggest?q=${encodeURIComponent(query)}`, { signal }),
   getDeliveryZones: () => request('/api/delivery-zones'),
 
+  // Offers (Public)
+  getOffers: () => request('/api/offers'),
+  getOfferById: (id) => request(`/api/offers/${id}`),
+
   // Orders
   createOrder: (orderData) => request('/api/orders', { method: 'POST', body: orderData }),
   getMyOrders: (page = 1) => request(`/api/orders/my-orders?page=${page}`),
@@ -129,17 +133,36 @@ export const api = {
     getPendingTraders: () => request('/api/admin/pending-traders'),
     approveTrader: (userId) => request(`/api/admin/approve-trader/${userId}`, { method: 'PATCH' }),
     rejectTrader: (userId, reason) => request(`/api/admin/reject-trader/${userId}`, { method: 'PATCH', body: { reason } }),
+    getProducts: (params = '') => request(params ? `/api/admin/products?${params}` : '/api/admin/products'),
     createProduct: (productData) => request('/api/admin/products', { method: 'POST', body: productData }),
     updateProduct: (id, productData) => request(`/api/admin/products/${id}`, { method: 'PUT', body: productData }),
     deleteProduct: (id) => request(`/api/admin/products/${id}`, { method: 'DELETE' }),
     getCategories: () => request('/api/admin/categories'),
+    getCategoryProducts: (id) => request(`/api/admin/categories/${id}/products`),
     createCategory: (data) => request('/api/admin/categories', { method: 'POST', body: typeof data === 'string' ? { name: data } : data }),
     updateCategory: (id, data) => request(`/api/admin/categories/${id}`, { method: 'PUT', body: data }),
-    deleteCategory: (id) => request(`/api/admin/categories/${id}`, { method: 'DELETE' }),
+    deleteCategory: (id, data) =>
+      request(`/api/admin/categories/${id}`, {
+        method: 'DELETE',
+        ...(data ? { body: data } : {}),
+      }),
+    moveProducts: (data) => request('/api/admin/categories/move-products', { method: 'PATCH', body: data }),
     reorderCategories: (items) => request('/api/admin/categories/reorder', { method: 'PATCH', body: { items } }),
     getLowStock: () => request('/api/admin/inventory/low-stock'),
     getOutOfStock: () => request('/api/admin/inventory/out-of-stock'),
     uploadProductImage: (id, formData) => request(`/api/admin/products/${id}/upload-image`, { method: 'POST', body: formData }),
+
+    // Offers Management
+    getOffers: (params = '') => request(params ? `/api/admin/offers?${params}` : '/api/admin/offers'),
+    createOffer: (data) => request('/api/admin/offers', { method: 'POST', body: data }),
+    updateOffer: (id, data) => request(`/api/admin/offers/${id}`, { method: 'PUT', body: data }),
+    deleteOffer: (id) => request(`/api/admin/offers/${id}`, { method: 'DELETE' }),
+    toggleOffer: (id) => request(`/api/admin/offers/${id}/toggle`, { method: 'PATCH' }),
+    toggleOfferVisibility: (id) => request(`/api/admin/offers/${id}/visibility`, { method: 'PATCH' }),
+    addOfferItems: (id, data) => request(`/api/admin/offers/${id}/items`, { method: 'POST', body: data }),
+    updateOfferItem: (id, itemId, data) => request(`/api/admin/offers/${id}/items/${itemId}`, { method: 'PUT', body: data }),
+    removeOfferItem: (id, itemId) => request(`/api/admin/offers/${id}/items/${itemId}`, { method: 'DELETE' }),
+    uploadOfferBanner: (id, formData) => request(`/api/admin/offers/${id}/upload-banner`, { method: 'POST', body: formData }),
   },
 
   // Payment Destinations (Public & Owner Management)

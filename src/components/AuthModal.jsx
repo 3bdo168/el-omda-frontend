@@ -75,7 +75,7 @@ export const AuthModal = ({ isOpen, onClose, onSuccess }) => {
           <div>
             <h3 className="text-base font-extrabold text-slate-900">
               {isRegister ? (
-                <>إنشاء حساب جديد في بيت الجملة <span className="font-normal text-[10px] text-slate-500 whitespace-nowrap">تبع مؤسسه صلى على النبى</span></>
+                <>إنشاء حساب جديد في بيت الجملة <span className="font-normal text-[10px] text-slate-500 whitespace-nowrap"> </span></>
               ) : (
                 'تسجيل الدخول'
               )}
@@ -105,21 +105,19 @@ export const AuthModal = ({ isOpen, onClose, onSuccess }) => {
           <div className="flex border-b border-slate-200 mb-4">
             <button
               onClick={() => setIsRegister(false)}
-              className={`flex-1 py-2 text-xs font-bold border-b-2 transition-smooth ${
-                !isRegister
+              className={`flex-1 py-2 text-xs font-bold border-b-2 transition-smooth ${!isRegister
                   ? 'border-emerald-600 text-emerald-700'
                   : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
+                }`}
             >
               تسجيل الدخول
             </button>
             <button
               onClick={() => setIsRegister(true)}
-              className={`flex-1 py-2 text-xs font-bold border-b-2 transition-smooth ${
-                isRegister
+              className={`flex-1 py-2 text-xs font-bold border-b-2 transition-smooth ${isRegister
                   ? 'border-emerald-600 text-emerald-700'
                   : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
+                }`}
             >
               حساب جديد
             </button>
@@ -135,22 +133,20 @@ export const AuthModal = ({ isOpen, onClose, onSuccess }) => {
                     <button
                       type="button"
                       onClick={() => setUserType('CUSTOMER')}
-                      className={`p-2 rounded-xl border text-center font-bold transition-smooth ${
-                        userType === 'CUSTOMER'
+                      className={`p-2 rounded-xl border text-center font-bold transition-smooth ${userType === 'CUSTOMER'
                           ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
                           : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
+                        }`}
                     >
                       عميل تجزئة (قطاعي)
                     </button>
                     <button
                       type="button"
                       onClick={() => setUserType('TRADER')}
-                      className={`p-2 rounded-xl border text-center font-bold transition-smooth ${
-                        userType === 'TRADER'
+                      className={`p-2 rounded-xl border text-center font-bold transition-smooth ${userType === 'TRADER'
                           ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
                           : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
+                        }`}
                     >
                       تاجر جملة (B2B)
                     </button>

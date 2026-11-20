@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react';
-import { scrollRtl, checkRtlScrollBounds } from '../utils/rtlScroll';
+import {
+  scrollRtl,
+  checkRtlScrollBounds,
+  scrollElementIntoCenterRtl,
+} from '../utils/rtlScroll';
 
 /** Spring-animated sliding indicator that follows the active category tab */
 const SlidingIndicator = ({ containerRef, activeSelector, variant = 'emerald' }) => {
@@ -67,7 +71,14 @@ export const CategoryScrollBar = ({
   onOpenSheet,
 }) => {
   const scrollRef = useRef(null);
-  const swipeStartRef = useRef(null);
+  const rafRef = useRef(0);
+  const dragStateRef = useRef({
+    active: false,
+    startX: 0,
+    startScroll: 0,
+    moved: false,
+    suppressNextClick: false,
+  });
 
   // canScrollLeft: content extends to the visual left
   // canScrollRight: content extends to the visual right
@@ -84,94 +95,114 @@ export const CategoryScrollBar = ({
     setCanScrollRight(bounds.canScrollRight);
   }, []);
 
+  const scheduleUpdateArrows = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
+    rafRef.current = window.requestAnimationFrame(() => {
+      rafRef.current = 0;
+      updateArrows();
+    });
+  }, [updateArrows]);
+
   // Event listeners for scroll, resize, and DOM changes
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
+    if (!el) return undefined;
 
-    updateArrows();
+    scheduleUpdateArrows();
 
-    el.addEventListener('scroll', updateArrows, { passive: true });
-    window.addEventListener('resize', updateArrows);
+    el.addEventListener('scroll', scheduleUpdateArrows, { passive: true });
+    window.addEventListener('resize', scheduleUpdateArrows);
 
     let ro;
     if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(updateArrows);
+      ro = new ResizeObserver(scheduleUpdateArrows);
       ro.observe(el);
     }
 
     return () => {
-      el.removeEventListener('scroll', updateArrows);
-      window.removeEventListener('resize', updateArrows);
+      if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
+      el.removeEventListener('scroll', scheduleUpdateArrows);
+      window.removeEventListener('resize', scheduleUpdateArrows);
       ro?.disconnect();
     };
-  }, [updateArrows, categories.length]);
+  }, [scheduleUpdateArrows, categories.length]);
 
-  // Auto-scroll active tab into view when selection changes
+  // Auto-scroll active tab into view when selection changes (cross-browser RTL safe)
   useEffect(() => {
     const container = scrollRef.current;
-    if (!container) return;
+    if (!container) return undefined;
 
-    requestAnimationFrame(() => {
-      const activeEl = container.querySelector(`[data-cat-id="${selectedCategory}"]`);
+    const frame = window.requestAnimationFrame(() => {
+      const items = container.querySelectorAll('[data-cat-id]');
+      const targetKey = String(selectedCategory);
+      let activeEl = null;
+      for (const item of items) {
+        if (item.getAttribute('data-cat-id') === targetKey) {
+          activeEl = item;
+          break;
+        }
+      }
       if (activeEl) {
-        const containerRect = container.getBoundingClientRect();
-        const activeRect = activeEl.getBoundingClientRect();
-        const scrollTarget = activeEl.offsetLeft - containerRect.width / 2 + activeRect.width / 2;
-        container.scrollTo({ left: scrollTarget, behavior: 'smooth' });
+        scrollElementIntoCenterRtl(container, activeEl, 'smooth');
       }
     });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [selectedCategory]);
 
-  // RTL-aware smooth scroll by ~70% of visible width
+  // RTL-aware smooth scroll by 75% of visible width
   const scrollInDirection = useCallback((direction) => {
     const el = scrollRef.current;
     if (!el) return;
-    scrollRtl(el, direction);
+    scrollRtl(el, direction, el.clientWidth * 0.75, 0.75);
   }, []);
 
-  // Touch swipe support
-  const handleTouchStart = useCallback((e) => {
-    swipeStartRef.current = {
-      x: e.touches[0].clientX,
-      scrollLeft: scrollRef.current?.scrollLeft || 0,
+  // Mouse drag support for desktop (5px threshold avoids dropping clicks)
+  const handleMouseDown = useCallback((e) => {
+    if (e.button !== 0 || !scrollRef.current) return;
+    dragStateRef.current = {
+      active: true,
+      startX: e.pageX,
+      startScroll: scrollRef.current.scrollLeft,
+      moved: false,
+      suppressNextClick: false,
     };
   }, []);
 
-  const handleTouchMove = useCallback((e) => {
-    if (!swipeStartRef.current || !scrollRef.current) return;
-    const dx = swipeStartRef.current.x - e.touches[0].clientX;
-    scrollRef.current.scrollLeft = swipeStartRef.current.scrollLeft + dx;
-  }, []);
-
-  const handleTouchEnd = useCallback(() => {
-    swipeStartRef.current = null;
-    updateArrows();
-  }, [updateArrows]);
-
-  // Mouse drag support for desktop
-  const handleMouseDown = useCallback((e) => {
-    if (!scrollRef.current) return;
-    scrollRef.current._isDragging = true;
-    scrollRef.current._startX = e.pageX;
-    scrollRef.current._startScroll = scrollRef.current.scrollLeft;
-    scrollRef.current.classList.add('is-grabbing');
-  }, []);
-
   const handleMouseMove = useCallback((e) => {
-    if (!scrollRef.current?._isDragging) return;
+    if (!dragStateRef.current.active || !scrollRef.current) return;
+    const dx = dragStateRef.current.startX - e.pageX;
+    if (!dragStateRef.current.moved && Math.abs(dx) <= 5) return;
+    if (!dragStateRef.current.moved) {
+      dragStateRef.current.moved = true;
+      scrollRef.current.classList.add('is-grabbing');
+    }
     e.preventDefault();
-    const dx = scrollRef.current._startX - e.pageX;
-    scrollRef.current.scrollLeft = scrollRef.current._startScroll + dx;
+    scrollRef.current.scrollLeft = dragStateRef.current.startScroll + dx;
   }, []);
 
   const handleMouseUp = useCallback(() => {
-    if (scrollRef.current) {
-      scrollRef.current._isDragging = false;
-      scrollRef.current.classList.remove('is-grabbing');
-      updateArrows();
+    if (!dragStateRef.current.active) return;
+    if (dragStateRef.current.moved) {
+      dragStateRef.current.suppressNextClick = true;
+      window.setTimeout(() => {
+        dragStateRef.current.suppressNextClick = false;
+      }, 60);
     }
-  }, [updateArrows]);
+    dragStateRef.current.active = false;
+    dragStateRef.current.moved = false;
+    scrollRef.current?.classList.remove('is-grabbing');
+    scheduleUpdateArrows();
+  }, [scheduleUpdateArrows]);
+
+  const handleClickCapture = useCallback((e) => {
+    if (dragStateRef.current.suppressNextClick) {
+      e.preventDefault();
+      e.stopPropagation();
+      dragStateRef.current.suppressNextClick = false;
+    }
+  }, []);
 
   return (
     <div className="flex items-center gap-2 w-full md:w-auto relative select-none">
@@ -181,26 +212,26 @@ export const CategoryScrollBar = ({
         onClick={onOpenSheet}
         title="عرض كل الأقسام"
         aria-label="عرض كل الأقسام"
-        className="shrink-0 w-9 h-9 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-300/30 text-emerald-700 flex items-center justify-center transition-smooth active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+        className="shrink-0 w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-300/30 text-emerald-700 flex items-center justify-center transition-smooth active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
       >
         <LayoutGrid className="w-4 h-4" />
       </button>
 
       {/* Categories Bar with Left/Right Arrow Navigation */}
-      <div className="relative flex-1 min-w-0 flex items-center">
+      <div className="relative flex-1 min-w-0 flex items-center min-h-[46px]">
         {/* Right Arrow (Visual Right = "السابق" / Previous in RTL) */}
         {canScrollRight && (
           <div className="absolute right-0 top-0 bottom-0 flex items-center z-20 pointer-events-none">
             {/* Edge fade */}
-            <div className="absolute right-0 inset-y-0 w-12 bg-gradient-to-l from-emerald-50/95 via-emerald-50/60 to-transparent pointer-events-none" />
+            <div className="absolute right-0 inset-y-0 w-14 bg-gradient-to-l from-emerald-50/95 via-emerald-50/60 to-transparent pointer-events-none" />
             <button
               type="button"
               onClick={() => scrollInDirection('right')}
-              aria-label="السابق"
+              aria-label="التمرير لليمين (السابق)"
               title="السابق"
-              className="pointer-events-auto relative w-[34px] h-[34px] rounded-full bg-white/95 border border-emerald-300/80 shadow-md hover:bg-emerald-50 hover:border-emerald-500 text-emerald-800 hover:text-emerald-950 flex items-center justify-center transition-smooth active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 mr-0.5"
+              className="pointer-events-auto relative w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/95 border border-emerald-300/80 shadow-md hover:bg-emerald-50 hover:border-emerald-500 text-emerald-800 hover:text-emerald-950 flex items-center justify-center transition-smooth active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 mr-0.5"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-5 h-5" />
             </button>
           </div>
         )}
@@ -209,15 +240,15 @@ export const CategoryScrollBar = ({
         {canScrollLeft && (
           <div className="absolute left-0 top-0 bottom-0 flex items-center z-20 pointer-events-none">
             {/* Edge fade */}
-            <div className="absolute left-0 inset-y-0 w-12 bg-gradient-to-r from-emerald-50/95 via-emerald-50/60 to-transparent pointer-events-none" />
+            <div className="absolute left-0 inset-y-0 w-14 bg-gradient-to-r from-emerald-50/95 via-emerald-50/60 to-transparent pointer-events-none" />
             <button
               type="button"
               onClick={() => scrollInDirection('left')}
-              aria-label="التالي"
+              aria-label="التمرير لليسار (التالي)"
               title="التالي"
-              className="pointer-events-auto relative w-[34px] h-[34px] rounded-full bg-white/95 border border-emerald-300/80 shadow-md hover:bg-emerald-50 hover:border-emerald-500 text-emerald-800 hover:text-emerald-950 flex items-center justify-center transition-smooth active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ml-0.5"
+              className="pointer-events-auto relative w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/95 border border-emerald-300/80 shadow-md hover:bg-emerald-50 hover:border-emerald-500 text-emerald-800 hover:text-emerald-950 flex items-center justify-center transition-smooth active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ml-0.5"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-5 h-5" />
             </button>
           </div>
         )}
@@ -225,13 +256,11 @@ export const CategoryScrollBar = ({
         {/* Scrollable Container with Sliding Indicator */}
         <div
           ref={scrollRef}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
+          onClickCapture={handleClickCapture}
           className="cat-scroll-bar liquid-indicator-track w-full"
         >
           <button

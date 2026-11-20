@@ -31,7 +31,11 @@ import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/Modal';
 import { ProductCardSkeleton } from '../components/Skeleton';
 import { SearchSuggestions } from '../components/SearchSuggestions';
+import { SearchInput } from '../components/SearchInput';
+import { HighlightText } from '../components/HighlightText';
 import { CategoryScrollBar } from '../components/CategoryScrollBar';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
+import { matchesArabicFields } from '../utils/arabicSearch';
 
 /** Reusable spring-animated sliding indicator that follows the active tab */
 const SlidingIndicator = ({ containerRef, activeSelector, variant = 'emerald' }) => {
@@ -97,6 +101,12 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
   const [justAddedFeedback, setJustAddedFeedback] = useState(false);
   const [showCategorySheet, setShowCategorySheet] = useState(false);
   const [internalMobileSearch, setInternalMobileSearch] = useState(false);
+  const {
+    value: categorySheetSearch,
+    debouncedValue: debouncedCategorySheetSearch,
+    setValue: setCategorySheetSearch,
+    clear: clearCategorySheetSearch,
+  } = useDebouncedSearch('', 300);
 
   const showMobileSearch = isMobileSearchOpen !== undefined ? isMobileSearchOpen : internalMobileSearch;
   const setShowMobileSearch = setIsMobileSearchOpen || setInternalMobileSearch;
@@ -104,7 +114,6 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
   // Refs
   const productsGridRef = useRef(null);
   const catSheetListRef = useRef(null);
-  const searchInputRef = useRef(null);
 
   // Local quantity map for inputs
   const [qtyMap, setQtyMap] = useState({});
@@ -140,12 +149,12 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
     isLoading: isLoadingProducts,
     isFetching: isFetchingProducts,
   } = useQuery({
-    queryKey: ['products', { selectedCategory, inStockOnly, search: activeSearchQuery }],
+    queryKey: ['products', { selectedCategory, inStockOnly, q: activeSearchQuery }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (selectedCategory) params.append('categoryId', selectedCategory);
       if (inStockOnly) params.append('inStockOnly', 'true');
-      if (activeSearchQuery) params.append('search', activeSearchQuery);
+      if (activeSearchQuery) params.append('q', activeSearchQuery);
 
       const res = await api.getProducts(params.toString());
       if (res.success && res.data) {
@@ -239,7 +248,7 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
     scrollToProducts();
   }, [scrollToProducts]);
 
-  // Lock body scroll for sheets
+  // Lock body scroll for sheets and reset sheet search on close
   useEffect(() => {
     if (showCategorySheet) {
       document.body.style.overflow = 'hidden';
@@ -248,11 +257,23 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
       }
     } else {
       document.body.style.overflow = '';
+      clearCategorySheetSearch();
     }
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showCategorySheet]);
+  }, [showCategorySheet, clearCategorySheetSearch]);
+
+  const filteredSheetCategories = useMemo(() => {
+    if (!debouncedCategorySheetSearch.trim()) return categories;
+    return categories.filter((cat) =>
+      matchesArabicFields([cat.name], debouncedCategorySheetSearch)
+    );
+  }, [categories, debouncedCategorySheetSearch]);
+
+  const showAllCategoriesOption =
+    !debouncedCategorySheetSearch.trim() ||
+    matchesArabicFields(['جميع الأقسام'], debouncedCategorySheetSearch);
 
   // Check if any filter is active
   const hasActiveFilters = activeSearchQuery || selectedCategory || inStockOnly;
@@ -279,7 +300,7 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
             <span>بوابة التوريد والتجارة الذكية</span>
           </div>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-tight">
-            مستودعات بيت الجملة <span className="text-sm font-normal text-emerald-200/80 whitespace-nowrap">تبع مؤسسه صلى على النبى</span> لتجارة الجملة والتجزئة
+            مستودعات بيت الجملة <span className="text-sm font-normal text-emerald-200/80 whitespace-nowrap"> </span> لتجارة الجملة والتجزئة
           </h2>
           <p className="text-sm text-emerald-100/90 leading-relaxed">
             أفضل الأسعار المباشرة من المصنع للمستهلك وللتجار. خصومات تصاعدية لطلبات الجملة
@@ -396,65 +417,105 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
                   </div>
                   <button
                     onClick={() => setShowCategorySheet(false)}
+                    aria-label="إغلاق نافذة الأقسام"
                     className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-smooth"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
+                {/* Search Categories inside Sheet */}
+                <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70 shrink-0">
+                  <SearchInput
+                    value={categorySheetSearch}
+                    onChange={setCategorySheetSearch}
+                    onClear={clearCategorySheetSearch}
+                    placeholder="ابحث عن قسم..."
+                    ariaLabel="البحث في أقسام المنتجات"
+                    accent="emerald"
+                    size="sm"
+                  />
+                </div>
                 {/* Categories List — Scrollable */}
                 <div ref={catSheetListRef} className="p-4 space-y-2 pb-8 overflow-y-auto flex-1 overscroll-contain">
                   {/* All Categories */}
-                  <button
-                    data-sheet-active={selectedCategory === '' ? 'true' : undefined}
-                    onClick={() => handleSheetCategorySelect('')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-right transition-smooth ${
-                      selectedCategory === ''
-                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
-                        : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:border-emerald-200'
-                    }`}
-                  >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                      selectedCategory === '' ? 'bg-white/20' : 'bg-emerald-100'
-                    }`}>
-                      <LayoutGrid className={`w-5 h-5 ${selectedCategory === '' ? 'text-white' : 'text-emerald-600'}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`font-bold text-sm leading-tight ${selectedCategory === '' ? 'text-white' : 'text-slate-900'}`}>جميع الأقسام</div>
-                      <div className={`text-[11px] mt-0.5 ${selectedCategory === '' ? 'text-emerald-100' : 'text-slate-400'}`}>
-                        {categories.reduce((s, c) => s + (c._count?.products || 0), 0)} منتج
-                      </div>
-                    </div>
-                  </button>
-
-                  {categories.map((cat) => (
+                  {showAllCategoriesOption && (
                     <button
-                      key={cat.id}
-                      data-sheet-active={selectedCategory === cat.id ? 'true' : undefined}
-                      onClick={() => handleSheetCategorySelect(cat.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-right transition-smooth ${
-                        selectedCategory === cat.id
+                      data-sheet-active={selectedCategory === '' ? 'true' : undefined}
+                      onClick={() => handleSheetCategorySelect('')}
+                      className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-right transition-smooth ${selectedCategory === ''
                           ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
                           : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:border-emerald-200'
-                      }`}
+                        }`}
                     >
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        selectedCategory === cat.id ? 'bg-white/20' : 'bg-slate-100'
-                      }`}>
-                        <Tag className={`w-5 h-5 ${selectedCategory === cat.id ? 'text-white' : 'text-slate-500'}`} />
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${selectedCategory === '' ? 'bg-white/20' : 'bg-emerald-100'
+                        }`}>
+                        <LayoutGrid className={`w-5 h-5 ${selectedCategory === '' ? 'text-white' : 'text-emerald-600'}`} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className={`font-bold text-sm leading-tight ${selectedCategory === cat.id ? 'text-white' : 'text-slate-900'}`}>{cat.name}</div>
-                        <div className={`text-[11px] mt-0.5 ${selectedCategory === cat.id ? 'text-emerald-100' : 'text-slate-400'}`}>
-                          {cat._count?.products || 0} منتج
+                        <div className={`font-bold text-sm leading-tight ${selectedCategory === '' ? 'text-white' : 'text-slate-900'}`}>
+                          <HighlightText
+                            text="جميع الأقسام"
+                            query={debouncedCategorySheetSearch}
+                            variant={selectedCategory === '' ? 'inverse' : 'emerald'}
+                          />
+                        </div>
+                        <div className={`text-[11px] mt-0.5 ${selectedCategory === '' ? 'text-emerald-100' : 'text-slate-400'}`}>
+                          {categories.reduce((s, c) => s + (c._count?.products || 0), 0)} منتج
                         </div>
                       </div>
-                      {selectedCategory === cat.id && (
-                        <span className="text-[11px] font-black px-2 py-1 rounded-full bg-white/25 text-white shrink-0">
-                          ✓
-                        </span>
-                      )}
                     </button>
-                  ))}
+                  )}
+
+                  {filteredSheetCategories.length === 0 && !showAllCategoriesOption ? (
+                    <div className="py-10 text-center space-y-2">
+                      <Search className="w-8 h-8 text-slate-300 mx-auto" />
+                      <p className="text-sm font-bold text-slate-700">
+                        لا توجد أقسام مطابقة لـ &ldquo;{debouncedCategorySheetSearch.trim()}&rdquo;
+                      </p>
+                      <p className="text-xs text-slate-400">جرب كتابة اسم قسم آخر</p>
+                      <button
+                        type="button"
+                        onClick={clearCategorySheetSearch}
+                        className="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-smooth"
+                      >
+                        مسح البحث
+                      </button>
+                    </div>
+                  ) : (
+                    filteredSheetCategories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        data-sheet-active={selectedCategory === cat.id ? 'true' : undefined}
+                        onClick={() => handleSheetCategorySelect(cat.id)}
+                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-right transition-smooth ${selectedCategory === cat.id
+                            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                            : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:border-emerald-200'
+                          }`}
+                      >
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${selectedCategory === cat.id ? 'bg-white/20' : 'bg-slate-100'
+                          }`}>
+                          <Tag className={`w-5 h-5 ${selectedCategory === cat.id ? 'text-white' : 'text-slate-500'}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className={`font-bold text-sm leading-tight truncate ${selectedCategory === cat.id ? 'text-white' : 'text-slate-900'}`}>
+                            <HighlightText
+                              text={cat.name}
+                              query={debouncedCategorySheetSearch}
+                              variant={selectedCategory === cat.id ? 'inverse' : 'emerald'}
+                            />
+                          </div>
+                          <div className={`text-[11px] mt-0.5 ${selectedCategory === cat.id ? 'text-emerald-100' : 'text-slate-400'}`}>
+                            {cat._count?.products || 0} منتج
+                          </div>
+                        </div>
+                        {selectedCategory === cat.id && (
+                          <span className="text-[11px] font-black px-2 py-1 rounded-full bg-white/25 text-white shrink-0">
+                            ✓
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -511,201 +572,224 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
 
       {/* Products Grid */}
       <div ref={productsGridRef}>
-      {isLoadingProducts ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <ProductCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : products.length === 0 ? (
-        <div className="py-20 text-center text-slate-400 glass-card rounded-3xl">
-          <ShoppingBag className="w-16 h-16 stroke-[1.2] mx-auto mb-3 text-slate-300" />
-          <h3 className="font-extrabold text-base text-slate-700">لا توجد منتجات مطابقة</h3>
-          <p className="text-xs text-slate-400 mt-1">جرب تغيير معايير البحث أو اختيار قسم آخر</p>
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={clearAllFilters}
-              className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-smooth"
-            >
-              مسح جميع الفلاتر
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {products.map((product) => {
-            const minQty = isTrader
-              ? product.minOrderQtyWholesale || 1
-              : product.minOrderQtyRetail || 1;
-            const currentQty = getQty(product);
-            const isOutOfStock = product.stockQuantity <= 0;
-            const isLowStock =
-              !isOutOfStock && product.stockQuantity <= product.lowStockAlertAt;
-
-            return (
-              <div
-                key={product.id}
-                className="glass-card rounded-3xl overflow-hidden border border-slate-200/90 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-smooth flex flex-col group"
+        {isLoadingProducts ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <ProductCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : products.length === 0 ? (
+          <div className="py-20 text-center text-slate-400 glass-card rounded-3xl px-4">
+            <ShoppingBag className="w-16 h-16 stroke-[1.2] mx-auto mb-3 text-slate-300" />
+            <h3 className="font-extrabold text-base text-slate-700">
+              {activeSearchQuery
+                ? `لا توجد منتجات مطابقة لـ «${activeSearchQuery}»`
+                : 'لا توجد منتجات مطابقة'}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">جرب تغيير معايير البحث أو اختيار قسم آخر</p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-smooth"
               >
-                {/* Product Image / Placeholder - Clickable for Expanded Details */}
+                مسح جميع الفلاتر
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {products.map((product) => {
+              const minQty = isTrader
+                ? product.minOrderQtyWholesale || 1
+                : product.minOrderQtyRetail || 1;
+              const currentQty = getQty(product);
+              const isOutOfStock = product.stockQuantity <= 0;
+              const isLowStock =
+                !isOutOfStock && product.stockQuantity <= product.lowStockAlertAt;
+
+              return (
                 <div
-                  onClick={() => openProductDetails(product)}
-                  className="relative h-52 bg-slate-100 flex items-center justify-center overflow-hidden cursor-pointer group/img select-none"
-                  title="انقر لعرض تفاصيل وصورة المنتج بشكل أوسع"
+                  key={product.id}
+                  className="glass-card rounded-3xl overflow-hidden border border-slate-200/90 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-smooth flex flex-col group"
                 >
-                  {product.imageUrl ? (
-                    <img
-                      src={getImageUrl(product.imageUrl)}
-                      alt={product.name}
-                      className="w-full h-full object-cover group-hover/img:scale-108 transition-smooth duration-500"
-                    />
-                  ) : (
-                    <span className="text-5xl group-hover/img:scale-110 transition-smooth select-none">
-                      📦
-                    </span>
-                  )}
-
-                  {/* Hover Overlay Hint */}
-                  <div className="absolute inset-0 bg-slate-950/25 opacity-0 group-hover/img:opacity-100 transition-smooth flex items-center justify-center p-2 pointer-events-none">
-                    <span className="bg-white/95 backdrop-blur-md text-slate-900 text-[11px] font-extrabold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 scale-90 group-hover/img:scale-100 transition-smooth">
-                      <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>عرض تفاصيل المنتج</span>
-                    </span>
-                  </div>
-
-                  {/* Badges */}
-                  <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end pointer-events-none">
-                    <span className="text-[10px] font-bold bg-white/90 backdrop-blur-md text-slate-700 px-2 py-0.5 rounded-full border border-slate-200 shadow-sm">
-                      {product.category?.name || 'قسم عام'}
-                    </span>
-                    {isOutOfStock ? (
-                      <span className="text-[10px] font-bold bg-red-600 text-white px-2 py-0.5 rounded-full shadow-sm">
-                        نفد المخزون
+                  {/* Product Image / Placeholder - Clickable for Expanded Details */}
+                  <div
+                    onClick={() => openProductDetails(product)}
+                    className="relative h-52 bg-slate-100 flex items-center justify-center overflow-hidden cursor-pointer group/img select-none"
+                    title="انقر لعرض تفاصيل وصورة المنتج بشكل أوسع"
+                  >
+                    {product.imageUrl ? (
+                      <img
+                        src={getImageUrl(product.imageUrl)}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover/img:scale-108 transition-smooth duration-500"
+                      />
+                    ) : (
+                      <span className="text-5xl group-hover/img:scale-110 transition-smooth select-none">
+                        📦
                       </span>
-                    ) : isLowStock ? (
-                      <span className="text-[10px] font-bold bg-amber-500 text-white px-2 py-0.5 rounded-full shadow-sm">
-                        متبقي {product.stockQuantity} فقط
-                      </span>
-                    ) : null}
-                  </div>
-
-                  {/* SKU pill */}
-                  <div className="absolute bottom-2 left-2 bg-slate-900/60 backdrop-blur-md text-white text-[10px] font-mono px-2 py-0.5 rounded-md pointer-events-none">
-                    {product.sku}
-                  </div>
-                </div>
-
-                {/* Details Body */}
-                <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                  <div>
-                    <h3
-                      onClick={() => openProductDetails(product)}
-                      className="font-bold text-sm text-slate-900 line-clamp-1 group-hover:text-emerald-700 transition-smooth cursor-pointer"
-                      title="عرض التفاصيل"
-                    >
-                      {product.name}
-                    </h3>
-                    <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">
-                      {product.description || 'منتج عالي الجودة متوفر للتسليم الفوري من المخازن'}
-                    </p>
-                  </div>
-
-                  {/* Pricing Details */}
-                  <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs text-slate-500">سعر القطاعي:</span>
-                      <span className="font-extrabold text-base text-slate-900">
-                        {parseFloat(product.retailPrice).toFixed(2)} ج.م
-                      </span>
-                    </div>
-
-                    {/* Wholesale Tiers Preview if available */}
-                    {product.pricingTiers && product.pricingTiers.length > 0 && (
-                      <div className="bg-emerald-50/70 p-2 rounded-xl border border-emerald-200 text-[11px] text-emerald-900 space-y-1">
-                        <div className="font-bold flex items-center justify-between">
-                          <span>شرائح الجملة (Wholesale):</span>
-                          <button
-                            type="button"
-                            onClick={() => openProductDetails(product)}
-                            className="text-[10px] text-emerald-700 font-bold hover:underline"
-                          >
-                            عرض التفاصيل
-                          </button>
-                        </div>
-                        {product.pricingTiers.slice(0, 2).map((tier, idx) => (
-                          <div key={idx} className="flex justify-between text-[10px] text-slate-700">
-                            <span>
-                              من {tier.minQuantity} {tier.maxQuantity ? `إلى ${tier.maxQuantity}` : 'فأكثر'}:
-                            </span>
-                            <span className="font-bold text-emerald-800">
-                              {parseFloat(tier.price).toFixed(2)} ج.م / وحدة
-                            </span>
-                          </div>
-                        ))}
-                      </div>
                     )}
 
-                    <div className="flex justify-between text-[11px] text-slate-500">
-                      <span>الحد الأدنى للطلب:</span>
-                      <span className="font-bold text-slate-700">
-                        {minQty} {isTrader ? 'وحدات (جملة)' : 'وحدة (قطاعي)'}
+                    {/* Hover Overlay Hint */}
+                    <div className="absolute inset-0 bg-slate-950/25 opacity-0 group-hover/img:opacity-100 transition-smooth flex items-center justify-center p-2 pointer-events-none">
+                      <span className="bg-white/95 backdrop-blur-md text-slate-900 text-[11px] font-extrabold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 scale-90 group-hover/img:scale-100 transition-smooth">
+                        <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>عرض تفاصيل المنتج</span>
                       </span>
                     </div>
-                  </div>
 
-                  {/* Actions & Stepper */}
-                  <div className="pt-2 flex items-center gap-2">
-                    {/* Stepper */}
-                    <div className="flex items-center border border-slate-200 rounded-xl bg-slate-50 p-1">
-                      <button
-                        disabled={isOutOfStock || currentQty <= minQty}
-                        onClick={() => handleQtyChange(product.id, currentQty - 1, minQty)}
-                        className="p-1 text-slate-600 hover:bg-white rounded-lg transition-smooth disabled:opacity-40"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <input
-                        disabled={isOutOfStock}
-                        type="number"
-                        min={minQty}
-                        max={product.stockQuantity}
-                        value={currentQty}
-                        onChange={(e) => handleQtyChange(product.id, e.target.value, minQty)}
-                        className="w-10 text-center bg-transparent text-xs font-bold focus:outline-none"
-                      />
-                      <button
-                        disabled={isOutOfStock || currentQty >= product.stockQuantity}
-                        onClick={() => handleQtyChange(product.id, currentQty + 1, minQty)}
-                        className="p-1 text-slate-600 hover:bg-white rounded-lg transition-smooth disabled:opacity-40"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
+                    {/* Badges */}
+                    <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end pointer-events-none">
+                      <span className="text-[10px] font-bold bg-white/90 backdrop-blur-md text-slate-700 px-2 py-0.5 rounded-full border border-slate-200 shadow-sm">
+                        <HighlightText
+                          text={product.category?.name || 'قسم عام'}
+                          query={activeSearchQuery}
+                          variant="emerald"
+                        />
+                      </span>
+                      {isOutOfStock ? (
+                        <span className="text-[10px] font-bold bg-red-600 text-white px-2 py-0.5 rounded-full shadow-sm">
+                          نفد المخزون
+                        </span>
+                      ) : isLowStock ? (
+                        <span className="text-[10px] font-bold bg-amber-500 text-white px-2 py-0.5 rounded-full shadow-sm">
+                          متبقي {product.stockQuantity} فقط
+                        </span>
+                      ) : null}
                     </div>
 
-                    {/* Add to Cart Button */}
-                    <button
-                      disabled={isOutOfStock}
-                      onClick={() => {
-                        addToCart(product, currentQty);
-                        onOpenCart();
-                      }}
-                      className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-smooth ${
-                        isOutOfStock
-                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                          : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/30'
-                      }`}
-                    >
-                      <ShoppingBag className="w-3.5 h-3.5" />
-                      <span>{isOutOfStock ? 'نفد' : 'إضافة للسلة'}</span>
-                    </button>
+                    {/* SKU pill */}
+                    <div className="absolute bottom-2 left-2 bg-slate-900/60 backdrop-blur-md text-white text-[10px] font-mono px-2 py-0.5 rounded-md pointer-events-none">
+                      <HighlightText
+                        text={product.sku}
+                        query={activeSearchQuery}
+                        markClassName="bg-emerald-400/90 text-slate-950 rounded-sm px-0.5 font-extrabold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Details Body */}
+                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                    <div>
+                      <h3
+                        onClick={() => openProductDetails(product)}
+                        className="font-bold text-sm text-slate-900 line-clamp-1 group-hover:text-emerald-700 transition-smooth cursor-pointer"
+                        title="عرض التفاصيل"
+                      >
+                        <HighlightText
+                          text={product.name}
+                          query={activeSearchQuery}
+                          variant="emerald"
+                        />
+                      </h3>
+                      <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">
+                        {product.description ? (
+                          <HighlightText
+                            text={product.description}
+                            query={activeSearchQuery}
+                            variant="emerald"
+                          />
+                        ) : (
+                          'منتج عالي الجودة متوفر للتسليم الفوري من المخازن'
+                        )}
+                      </p>
+                    </div>
+
+                    {/* Pricing Details */}
+                    <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-xs text-slate-500">سعر القطاعي:</span>
+                        <span className="font-extrabold text-base text-slate-900">
+                          {parseFloat(product.retailPrice).toFixed(2)} ج.م
+                        </span>
+                      </div>
+
+                      {/* Wholesale Tiers Preview if available */}
+                      {product.pricingTiers && product.pricingTiers.length > 0 && (
+                        <div className="bg-emerald-50/70 p-2 rounded-xl border border-emerald-200 text-[11px] text-emerald-900 space-y-1">
+                          <div className="font-bold flex items-center justify-between">
+                            <span>شرائح الجملة (Wholesale):</span>
+                            <button
+                              type="button"
+                              onClick={() => openProductDetails(product)}
+                              className="text-[10px] text-emerald-700 font-bold hover:underline"
+                            >
+                              عرض التفاصيل
+                            </button>
+                          </div>
+                          {product.pricingTiers.slice(0, 2).map((tier, idx) => (
+                            <div key={idx} className="flex justify-between text-[10px] text-slate-700">
+                              <span>
+                                من {tier.minQuantity} {tier.maxQuantity ? `إلى ${tier.maxQuantity}` : 'فأكثر'}:
+                              </span>
+                              <span className="font-bold text-emerald-800">
+                                {parseFloat(tier.price).toFixed(2)} ج.م / وحدة
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex justify-between text-[11px] text-slate-500">
+                        <span>الحد الأدنى للطلب:</span>
+                        <span className="font-bold text-slate-700">
+                          {minQty} {isTrader ? 'وحدات (جملة)' : 'وحدة (قطاعي)'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions & Stepper */}
+                    <div className="pt-2 flex items-center gap-2">
+                      {/* Stepper */}
+                      <div className="flex items-center border border-slate-200 rounded-xl bg-slate-50 p-1">
+                        <button
+                          disabled={isOutOfStock || currentQty <= minQty}
+                          onClick={() => handleQtyChange(product.id, currentQty - 1, minQty)}
+                          className="p-1 text-slate-600 hover:bg-white rounded-lg transition-smooth disabled:opacity-40"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <input
+                          disabled={isOutOfStock}
+                          type="number"
+                          min={minQty}
+                          max={product.stockQuantity}
+                          value={currentQty}
+                          onChange={(e) => handleQtyChange(product.id, e.target.value, minQty)}
+                          className="w-10 text-center bg-transparent text-xs font-bold focus:outline-none"
+                        />
+                        <button
+                          disabled={isOutOfStock || currentQty >= product.stockQuantity}
+                          onClick={() => handleQtyChange(product.id, currentQty + 1, minQty)}
+                          className="p-1 text-slate-600 hover:bg-white rounded-lg transition-smooth disabled:opacity-40"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Add to Cart Button */}
+                      <button
+                        disabled={isOutOfStock}
+                        onClick={() => {
+                          addToCart(product, currentQty);
+                          onOpenCart();
+                        }}
+                        className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-smooth ${isOutOfStock
+                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/30'
+                          }`}
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5" />
+                        <span>{isOutOfStock ? 'نفد' : 'إضافة للسلة'}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── PRODUCT DETAILS & IMAGE EXPANDED MODAL ──────────────────────── */}
@@ -728,13 +812,17 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
           return (
             <div className="bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-200 text-right">
               {/* Modal Header */}
-              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
                   <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full border border-emerald-200">
-                    {prod.category?.name || 'قسم عام'}
+                    <HighlightText
+                      text={prod.category?.name || 'قسم عام'}
+                      query={activeSearchQuery}
+                      variant="emerald"
+                    />
                   </span>
                   <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
-                    كود: {prod.sku}
+                    كود: <HighlightText text={prod.sku} query={activeSearchQuery} variant="emerald" />
                   </span>
                 </div>
                 <button
@@ -807,10 +895,22 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
                 <div className="space-y-4">
                   <div>
                     <h3 className="text-xl font-black text-slate-900 tracking-tight leading-snug">
-                      {prod.name}
+                      <HighlightText
+                        text={prod.name}
+                        query={activeSearchQuery}
+                        variant="emerald"
+                      />
                     </h3>
                     <p className="text-xs text-slate-600 mt-2 leading-relaxed whitespace-pre-line">
-                      {prod.description || 'منتج ممتاز متوفر من مستودعات بيت الجملة (تبع مؤسسه صلى على النبى) بأعلى معايير الجودة والضمان المباشر.'}
+                      {prod.description ? (
+                        <HighlightText
+                          text={prod.description}
+                          query={activeSearchQuery}
+                          variant="emerald"
+                        />
+                      ) : (
+                        'منتج ممتاز متوفر من مستودعات بيت الجملة ( ) بأعلى معايير الجودة والضمان المباشر.'
+                      )}
                     </p>
                   </div>
 
@@ -851,11 +951,10 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
                             return (
                               <div
                                 key={idx}
-                                className={`px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-smooth ${
-                                  isCurrent
+                                className={`px-3 py-2 rounded-xl text-xs flex items-center justify-between transition-smooth ${isCurrent
                                     ? 'bg-emerald-600 text-white font-black shadow-sm ring-2 ring-emerald-600/30'
                                     : 'bg-white/90 text-slate-700 border border-emerald-100 font-medium'
-                                }`}
+                                  }`}
                               >
                                 <span>
                                   من {tier.minQuantity} {tier.maxQuantity ? `إلى ${tier.maxQuantity}` : 'فأكثر'} وحدة:
@@ -938,13 +1037,12 @@ export const StoreView = ({ onOpenCart, isMobileSearchOpen, setIsMobileSearchOpe
                         setJustAddedFeedback(true);
                         setTimeout(() => setJustAddedFeedback(false), 2000);
                       }}
-                      className={`w-full sm:flex-1 py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-smooth shadow-md ${
-                        isOutOfStock
+                      className={`w-full sm:flex-1 py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-smooth shadow-md ${isOutOfStock
                           ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                           : justAddedFeedback
-                          ? 'bg-emerald-800 text-white'
-                          : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
-                      }`}
+                            ? 'bg-emerald-800 text-white'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
+                        }`}
                     >
                       {justAddedFeedback ? (
                         <>

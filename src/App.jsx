@@ -13,20 +13,21 @@ import { OrdersView } from './views/OrdersView';
 import { AdminView } from './views/AdminView';
 import { OwnerView } from './views/OwnerView';
 import { EmployeeView } from './views/EmployeeView';
+import { OffersView } from './views/OffersView';
 
 const getInitialTab = () => {
   if (typeof window === 'undefined') return 'store';
   const path = window.location.pathname.replace(/^\/+/, '').split('/')[0].toLowerCase();
-  if (path && ['store', 'orders', 'admin', 'owner', 'employee'].includes(path)) {
+  if (path && ['store', 'offers', 'orders', 'admin', 'owner', 'employee'].includes(path)) {
     return path;
   }
   const params = new URLSearchParams(window.location.search);
   const tabParam = params.get('tab')?.toLowerCase();
-  if (tabParam && ['store', 'orders', 'admin', 'owner', 'employee'].includes(tabParam)) {
+  if (tabParam && ['store', 'offers', 'orders', 'admin', 'owner', 'employee'].includes(tabParam)) {
     return tabParam;
   }
   const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase();
-  if (hash && ['store', 'orders', 'admin', 'owner', 'employee'].includes(hash)) {
+  if (hash && ['store', 'offers', 'orders', 'admin', 'owner', 'employee'].includes(hash)) {
     return hash;
   }
   return 'store';
@@ -71,7 +72,7 @@ const MainApp = () => {
   // - If user is CUSTOMER, accessing admin/owner/employee redirects to 'store'
   useEffect(() => {
     if (!isAuthenticated) {
-      if (activeTab !== 'store') {
+      if (activeTab !== 'store' && activeTab !== 'offers') {
         setActiveTab('store');
       }
       return;
@@ -177,6 +178,9 @@ const MainApp = () => {
               setIsMobileSearchOpen={setIsMobileSearchOpen}
             />
           )}
+          {activeTab === 'offers' && (
+            <OffersView onOpenCart={() => setIsCartOpen(true)} />
+          )}
           {activeTab === 'orders' && <OrdersView initialSelectedOrderId={targetOrderId} />}
           {activeTab === 'admin' && <AdminView initialSubTab={initialAdminTab} />}
           {activeTab === 'owner' && (role === 'OWNER' ? <OwnerView /> : null)}
@@ -239,13 +243,13 @@ const MainApp = () => {
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
             <span className="font-extrabold text-slate-900 text-sm">
-              بيت الجملة <span className="font-normal text-[10px] text-slate-500 whitespace-nowrap">تبع مؤسسه صلى على النبى</span>
+              بيت الجملة <span className="font-normal text-[10px] text-slate-500 whitespace-nowrap"> </span>
             </span>
             <span className="hidden sm:inline">•</span>
             <span className="text-center">بوابة تجارة الجملة والتجزئة الذكية B2B & B2C</span>
           </div>
           <div className="text-slate-400">
-            © {new Date().getFullYear()} بيت الجملة <span className="font-normal text-[10px] text-slate-400 whitespace-nowrap">تبع مؤسسه صلى على النبى</span>. جميع الحقوق محفوظة.
+            © {new Date().getFullYear()} بيت الجملة <span className="font-normal text-[10px] text-slate-400 whitespace-nowrap"> </span>. جميع الحقوق محفوظة.
           </div>
         </div>
       </footer>

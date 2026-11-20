@@ -136,10 +136,10 @@ export const ConfirmModal = ({
   isOpen,
   onClose,
   onConfirm,
-  title = '????? ???????',
-  message = '?? ??? ????? ?? ????? ?? ?????? ??? ????????',
-  confirmText = '?????',
-  cancelText = '?????',
+  title = 'تأكيد الإجراء',
+  message = 'هل أنت متأكد من رغبتك في متابعة هذا الإجراء؟',
+  confirmText = 'تأكيد',
+  cancelText = 'إلغاء',
   isDanger = false,
   isLoading = false,
 }) => {
@@ -170,7 +170,7 @@ export const ConfirmModal = ({
                 : 'bg-purple-700 hover:bg-purple-800 disabled:opacity-50'
             }`}
           >
-            {isLoading ? '???? ???????...' : confirmText}
+            {isLoading ? 'جاري التنفيذ...' : confirmText}
           </button>
           <button
             type="button"

@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { Modal, ConfirmModal } from './Modal';
-import { ScrollableNavContainer } from './ScrollableNavContainer';
+import { ScrollableRow } from './ScrollableRow';
 
 export const TeamManagementPanel = () => {
   const queryClient = useQueryClient();
@@ -341,8 +341,17 @@ export const TeamManagementPanel = () => {
       {/* ── Filter Tabs & Search Bar ──────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Filters with scrollable buttons */}
-        <ScrollableNavContainer variant="amber" className="glass-card p-1 rounded-2xl gap-1 text-xs font-bold">
+        <ScrollableRow
+          mode="tabs"
+          variant="amber"
+          activeKey={filter}
+          ariaLabel="تصفية أعضاء الفريق"
+          className="glass-card p-1 rounded-2xl gap-1 text-xs font-bold"
+        >
           <button
+            type="button"
+            data-scroll-item="all"
+            aria-selected={filter === 'all'}
             onClick={() => setFilter('all')}
             className={`px-3 py-1.5 rounded-xl transition-smooth whitespace-nowrap shrink-0 ${
               filter === 'all'
@@ -353,6 +362,9 @@ export const TeamManagementPanel = () => {
             الكل ({members.length})
           </button>
           <button
+            type="button"
+            data-scroll-item="admins"
+            aria-selected={filter === 'admins'}
             onClick={() => setFilter('admins')}
             className={`px-3 py-1.5 rounded-xl transition-smooth whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
               filter === 'admins'
@@ -364,6 +376,9 @@ export const TeamManagementPanel = () => {
             المشرفين ({members.filter((m) => m.role === 'ADMIN').length})
           </button>
           <button
+            type="button"
+            data-scroll-item="employees"
+            aria-selected={filter === 'employees'}
             onClick={() => setFilter('employees')}
             className={`px-3 py-1.5 rounded-xl transition-smooth whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
               filter === 'employees'
@@ -375,6 +390,9 @@ export const TeamManagementPanel = () => {
             الموظفين ({members.filter((m) => m.role === 'EMPLOYEE').length})
           </button>
           <button
+            type="button"
+            data-scroll-item="inactive"
+            aria-selected={filter === 'inactive'}
             onClick={() => setFilter('inactive')}
             className={`px-3 py-1.5 rounded-xl transition-smooth whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
               filter === 'inactive'
@@ -385,10 +403,10 @@ export const TeamManagementPanel = () => {
             <UserX className="w-3.5 h-3.5" />
             المعطلين ({members.filter((m) => !m.isActive).length})
           </button>
-        </ScrollableNavContainer>
+        </ScrollableRow>
 
         {/* Search Input */}
-        <div className="relative min-w-[240px]">
+        <div className="relative w-full sm:w-auto sm:min-w-[240px]">
           <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -420,28 +438,35 @@ export const TeamManagementPanel = () => {
         <>
           {/* ── Desktop View (Table on md and above) ────────────────────────────── */}
           <div className="hidden md:block glass-card rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+            <ScrollableRow
+              mode="table"
+              variant="amber"
+              hasStickyStart
+              ariaLabel="جدول إدارة أعضاء الفريق"
+            >
+              <table className="w-full min-w-[820px] text-right text-xs">
                 <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-extrabold text-[11px] uppercase tracking-wider">
-                    <th className="py-3.5 px-4">العضو</th>
-                    <th className="py-3.5 px-4">الدور</th>
-                    <th className="py-3.5 px-4">الحالة</th>
-                    <th className="py-3.5 px-4">التارجت الحالي</th>
-                    <th className="py-3.5 px-4">تاريخ الانضمام</th>
-                    <th className="py-3.5 px-4 text-center">الإجراءات</th>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold text-[11px] uppercase tracking-wider">
+                    <th className="sticky right-0 z-20 bg-slate-50 py-3.5 px-4 min-w-[220px] border-l border-slate-200/80 shadow-[-4px_0_10px_-6px_rgba(15,23,42,0.12)]">
+                      العضو
+                    </th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">الدور</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">الحالة</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">التارجت الحالي</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">تاريخ الانضمام</th>
+                    <th className="py-3.5 px-4 text-center whitespace-nowrap">الإجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredMembers.map((member) => (
                     <tr
                       key={member.id}
-                      className={`hover:bg-slate-50/70 transition-smooth ${
+                      className={`group hover:bg-slate-50/70 transition-smooth ${
                         !member.isActive ? 'bg-slate-50/40 opacity-75' : ''
                       }`}
                     >
                       {/* Name & Contact */}
-                      <td className="py-3.5 px-4">
+                      <td className="sticky right-0 z-20 bg-white group-hover:bg-slate-50 py-3.5 px-4 min-w-[220px] border-l border-slate-100 shadow-[-4px_0_10px_-6px_rgba(15,23,42,0.12)] transition-smooth">
                         <div className="flex items-center gap-3">
                           <div
                             className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
@@ -592,7 +617,7 @@ export const TeamManagementPanel = () => {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollableRow>
           </div>
 
           {/* ── Mobile View (Cards below md) ──────────────────────────────────── */}

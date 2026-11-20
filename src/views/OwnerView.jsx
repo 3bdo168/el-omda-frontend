@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Crown,
@@ -30,6 +30,7 @@ import {
   Smartphone,
   Wallet,
   Banknote,
+  Search,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -44,8 +45,12 @@ import { api } from '../services/api';
 import { Modal } from '../components/Modal';
 import { TasksModal } from '../components/TasksModal';
 import { TeamManagementPanel } from '../components/TeamManagementPanel';
-import { ScrollableNavContainer } from '../components/ScrollableNavContainer';
+import { ScrollableRow } from '../components/ScrollableRow';
 import { MetricCardSkeleton, TableRowSkeleton } from '../components/Skeleton';
+import { SearchInput } from '../components/SearchInput';
+import { HighlightText } from '../components/HighlightText';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
+import { matchesArabicFields } from '../utils/arabicSearch';
 
 // ─── Revenue Trend Chart ──────────────────────────────────────────────────────
 
@@ -141,18 +146,20 @@ const RevenueChart = ({ timeSeries, period }) => {
 export const OwnerView = () => {
   const [activeTab, setActiveTab] = useState('financial'); // 'financial' | 'employees' | 'products'
   const [datePeriod, setDatePeriod] = useState('ALL'); // 'TODAY' | 'WEEK' | 'MONTH' | 'ALL'
-  const queryClient = useQueryClient();
-  const ownerTabBarRef = React.useRef(null);
+  const {
+    value: ownerProductSearch,
+    debouncedValue: debouncedOwnerProductSearch,
+    setValue: setOwnerProductSearch,
+    clear: clearOwnerProductSearch,
+  } = useDebouncedSearch('', 300);
 
-  // Auto-scroll active tab into view
+  // Reset product search when leaving the products analytics tab; preserve across datePeriod changes
   useEffect(() => {
-    if (ownerTabBarRef.current) {
-      const activeEl = ownerTabBarRef.current.querySelector(`[data-owner-tab="${activeTab}"]`);
-      if (activeEl) {
-        activeEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-      }
+    if (activeTab !== 'products') {
+      clearOwnerProductSearch();
     }
-  }, [activeTab]);
+  }, [activeTab, clearOwnerProductSearch]);
+  const queryClient = useQueryClient();
 
   // ── Employee Management State ───────────────────────────────────────────────
   const [showCreateEmployeeModal, setShowCreateEmployeeModal] = useState(false);
@@ -253,6 +260,22 @@ export const OwnerView = () => {
     },
     enabled: activeTab === 'products',
   });
+
+  const filteredTopSelling = useMemo(() => {
+    const items = (productsData?.topSelling || []).map((p, idx) => ({ ...p, _rank: idx + 1 }));
+    if (!debouncedOwnerProductSearch.trim()) return items;
+    return items.filter((p) =>
+      matchesArabicFields([p.name, p.sku, p.category], debouncedOwnerProductSearch)
+    );
+  }, [productsData, debouncedOwnerProductSearch]);
+
+  const filteredLowestSelling = useMemo(() => {
+    const items = (productsData?.lowestSelling || []).map((p, idx) => ({ ...p, _rank: idx + 1 }));
+    if (!debouncedOwnerProductSearch.trim()) return items;
+    return items.filter((p) =>
+      matchesArabicFields([p.name, p.sku, p.category], debouncedOwnerProductSearch)
+    );
+  }, [productsData, debouncedOwnerProductSearch]);
 
   const {
     data: destinationsList = [],
@@ -510,8 +533,14 @@ export const OwnerView = () => {
         </div>
 
         {/* Date Filter Tabs */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200 self-start sm:self-auto max-w-full">
-          <ScrollableNavContainer variant="amber" className="gap-1">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200 self-start sm:self-auto max-w-full min-w-0">
+          <ScrollableRow
+            mode="tabs"
+            variant="amber"
+            activeKey={datePeriod}
+            ariaLabel="اختيار الفترة الزمنية للتقارير"
+            className="gap-1 px-0.5"
+          >
             {[
               { id: 'ALL', label: 'كل الفترات' },
               { id: 'MONTH', label: 'آخر 30 يوم' },
@@ -520,6 +549,9 @@ export const OwnerView = () => {
             ].map((p) => (
               <button
                 key={p.id}
+                type="button"
+                data-scroll-item={p.id}
+                aria-selected={datePeriod === p.id}
                 onClick={() => setDatePeriod(p.id)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-smooth whitespace-nowrap shrink-0 ${
                   datePeriod === p.id
@@ -530,11 +562,13 @@ export const OwnerView = () => {
                 {p.label}
               </button>
             ))}
-          </ScrollableNavContainer>
+          </ScrollableRow>
           <button
+            type="button"
             onClick={handleRefreshOwnerData}
-            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200 shrink-0"
+            className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200 shrink-0"
             title="تحديث"
+            aria-label="تحديث البيانات"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isTabFetching ? 'animate-spin' : ''}`} />
           </button>
@@ -543,14 +577,20 @@ export const OwnerView = () => {
 
       {/* Main Owner Tabs */}
       <div className="liquid-glass-bar liquid-glass-bar--amber p-1.5 sm:p-2 rounded-[20px] relative z-10 shadow-sm border border-amber-200/60">
-        <ScrollableNavContainer
+        <ScrollableRow
+          mode="tabs"
           variant="amber"
-          className="gap-1.5 px-1 py-0.5"
+          activeKey={activeTab}
+          ariaLabel="أقسام لوحة المالك"
+          className="gap-1.5 px-1 py-1"
         >
         <button
+          type="button"
+          data-scroll-item="financial"
           data-owner-tab="financial"
+          aria-selected={activeTab === 'financial'}
           onClick={() => setActiveTab('financial')}
-          className={`shrink-0 lg:flex-1 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-smooth flex items-center justify-center gap-2 whitespace-nowrap ${
+          className={`shrink-0 lg:flex-1 px-3.5 py-2.5 min-h-[40px] rounded-xl text-xs font-extrabold transition-smooth flex items-center justify-center gap-2 whitespace-nowrap ${
             activeTab === 'financial'
               ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
               : 'text-slate-600 hover:bg-slate-100'
@@ -561,9 +601,12 @@ export const OwnerView = () => {
         </button>
 
         <button
+          type="button"
+          data-scroll-item="employees"
           data-owner-tab="employees"
+          aria-selected={activeTab === 'employees'}
           onClick={() => setActiveTab('employees')}
-          className={`shrink-0 lg:flex-1 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-smooth flex items-center justify-center gap-2 whitespace-nowrap ${
+          className={`shrink-0 lg:flex-1 px-3.5 py-2.5 min-h-[40px] rounded-xl text-xs font-extrabold transition-smooth flex items-center justify-center gap-2 whitespace-nowrap ${
             activeTab === 'employees'
               ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
               : 'text-slate-600 hover:bg-slate-100'
@@ -574,9 +617,12 @@ export const OwnerView = () => {
         </button>
 
         <button
+          type="button"
+          data-scroll-item="products"
           data-owner-tab="products"
+          aria-selected={activeTab === 'products'}
           onClick={() => setActiveTab('products')}
-          className={`shrink-0 lg:flex-1 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-smooth flex items-center justify-center gap-2 whitespace-nowrap ${
+          className={`shrink-0 lg:flex-1 px-3.5 py-2.5 min-h-[40px] rounded-xl text-xs font-extrabold transition-smooth flex items-center justify-center gap-2 whitespace-nowrap ${
             activeTab === 'products'
               ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
               : 'text-slate-600 hover:bg-slate-100'
@@ -587,9 +633,12 @@ export const OwnerView = () => {
         </button>
 
         <button
+          type="button"
+          data-scroll-item="payments"
           data-owner-tab="payments"
+          aria-selected={activeTab === 'payments'}
           onClick={() => setActiveTab('payments')}
-          className={`shrink-0 lg:flex-1 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-smooth flex items-center justify-center gap-2 whitespace-nowrap ${
+          className={`shrink-0 lg:flex-1 px-3.5 py-2.5 min-h-[40px] rounded-xl text-xs font-extrabold transition-smooth flex items-center justify-center gap-2 whitespace-nowrap ${
             activeTab === 'payments'
               ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
               : 'text-slate-600 hover:bg-slate-100'
@@ -600,9 +649,12 @@ export const OwnerView = () => {
         </button>
 
         <button
+          type="button"
+          data-scroll-item="team"
           data-owner-tab="team"
+          aria-selected={activeTab === 'team'}
           onClick={() => setActiveTab('team')}
-          className={`shrink-0 lg:flex-1 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-smooth flex items-center justify-center gap-2 whitespace-nowrap ${
+          className={`shrink-0 lg:flex-1 px-3.5 py-2.5 min-h-[40px] rounded-xl text-xs font-extrabold transition-smooth flex items-center justify-center gap-2 whitespace-nowrap ${
             activeTab === 'team'
               ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/30'
               : 'text-slate-600 hover:bg-slate-100'
@@ -611,7 +663,7 @@ export const OwnerView = () => {
           <Users className="w-4 h-4 shrink-0" />
           <span>إدارة الفريق</span>
         </button>
-        </ScrollableNavContainer>
+        </ScrollableRow>
       </div>
 
       {/* ── TAB 1: FINANCIAL REPORTS ────────────────────────────────────────── */}
@@ -997,89 +1049,197 @@ export const OwnerView = () => {
           ))}
         </div>
       )}
-      {activeTab === 'products' && productsData && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          {/* Top Selling Products */}
-          <div className="glass-card p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <h3 className="font-black text-sm text-slate-900 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-600 shrink-0" />
-                المنتجات الأكثر مبيعاً (Top-Selling Products)
-              </h3>
-              <span className="text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full shrink-0">
-                الأعلى طلباً
-              </span>
+      {activeTab === 'products' && productsData && (() => {
+        const hasOwnerProductQuery = Boolean(debouncedOwnerProductSearch.trim());
+        const bothEmpty =
+          hasOwnerProductQuery &&
+          filteredTopSelling.length === 0 &&
+          filteredLowestSelling.length === 0;
+
+        return (
+          <div className="space-y-4 sm:space-y-6">
+            {/* Product Analytics Search Toolbar */}
+            <div className="glass-card p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-extrabold text-xs sm:text-sm text-slate-900">
+                  البحث في تقارير أداء المنتجات
+                </span>
+                {hasOwnerProductQuery && (
+                  <span className="text-[11px] bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded-full">
+                    {filteredTopSelling.length} أكثر مبيعاً • {filteredLowestSelling.length} أقل مبيعاً
+                  </span>
+                )}
+              </div>
+              <SearchInput
+                value={ownerProductSearch}
+                onChange={setOwnerProductSearch}
+                onClear={clearOwnerProductSearch}
+                placeholder="ابحث باسم المنتج، كود الـ SKU، أو القسم..."
+                ariaLabel="البحث في تقارير المنتجات"
+                accent="amber"
+                size="sm"
+              />
             </div>
 
-            <div className="divide-y divide-slate-100 text-xs">
-              {productsData.topSelling?.map((p, idx) => (
-                <div key={p.id} className="py-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <h4 className="font-bold text-slate-900 truncate">{p.name}</h4>
-                      <p className="text-[11px] text-slate-400 truncate">
-                        كود: {p.sku} | القسم: {p.category}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-left shrink-0">
-                    <div className="font-extrabold text-emerald-700 text-xs sm:text-sm whitespace-nowrap">
-                      {p.totalQuantitySold} وحدة مباعة
-                    </div>
-                    <div className="text-[11px] text-slate-500 font-semibold whitespace-nowrap">
-                      عائد: {p.totalRevenue} ج.م
-                    </div>
-                  </div>
+            {bothEmpty ? (
+              <div className="py-14 px-4 text-center glass-card rounded-3xl border border-slate-200 space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center mx-auto text-amber-600">
+                  <Search className="w-7 h-7" />
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Lowest Selling Products (Dead Stock) */}
-          <div className="glass-card p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <h3 className="font-black text-sm text-slate-900 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                المنتجات الأقل مبيعاً / الراكدة (Dead Stock)
-              </h3>
-              <span className="text-[11px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full shrink-0">
-                تحتاج عروض لتصريفها
-              </span>
-            </div>
-
-            <div className="divide-y divide-slate-100 text-xs">
-              {productsData.lowestSelling?.map((p, idx) => (
-                <div key={p.id} className="py-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <h4 className="font-bold text-slate-900 truncate">{p.name}</h4>
-                      <p className="text-[11px] text-slate-400 truncate">
-                        كود: {p.sku} | المخزون بالمستودع: {p.stockQuantity} وحدة
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-left shrink-0">
-                    <div className="font-extrabold text-amber-800 text-xs sm:text-sm whitespace-nowrap">
-                      {p.totalQuantitySold} وحدة فقط
-                    </div>
-                    <div className="text-[11px] text-slate-400 whitespace-nowrap">
-                      سعر الوحدة: {p.retailPrice} ج.م
-                    </div>
-                  </div>
+                <div className="space-y-1">
+                  <h4 className="font-extrabold text-sm text-slate-800">
+                    لا توجد منتجات مطابقة لـ &ldquo;{debouncedOwnerProductSearch.trim()}&rdquo;
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    جرب البحث باسم منتج آخر، أو كود SKU، أو اسم القسم
+                  </p>
                 </div>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={clearOwnerProductSearch}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-smooth inline-flex items-center gap-1.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>مسح البحث</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                {/* Top Selling Products */}
+                <div className="glass-card p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <h3 className="font-black text-sm text-slate-900 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-emerald-600 shrink-0" />
+                      المنتجات الأكثر مبيعاً (Top-Selling Products)
+                    </h3>
+                    <span className="text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full shrink-0">
+                      الأعلى طلباً
+                    </span>
+                  </div>
+
+                  {filteredTopSelling.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400 font-bold">
+                      {hasOwnerProductQuery
+                        ? 'لا توجد منتجات مطابقة في قائمة الأكثر مبيعاً'
+                        : 'لا توجد بيانات مبيعات منتجات حالياً'}
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100 text-xs">
+                      {filteredTopSelling.map((p) => (
+                        <div key={p.id} className="py-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center shrink-0">
+                              {p._rank}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-bold text-slate-900 truncate">
+                                <HighlightText
+                                  text={p.name}
+                                  query={debouncedOwnerProductSearch}
+                                  variant="amber"
+                                />
+                              </h4>
+                              <p className="text-[11px] text-slate-400 truncate">
+                                كود:{' '}
+                                <HighlightText
+                                  text={p.sku}
+                                  query={debouncedOwnerProductSearch}
+                                  variant="amber"
+                                />{' '}
+                                | القسم:{' '}
+                                <HighlightText
+                                  text={p.category}
+                                  query={debouncedOwnerProductSearch}
+                                  variant="amber"
+                                />
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-left shrink-0">
+                            <div className="font-extrabold text-emerald-700 text-xs sm:text-sm whitespace-nowrap">
+                              {p.totalQuantitySold} وحدة مباعة
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-semibold whitespace-nowrap">
+                              عائد: {p.totalRevenue} ج.م
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Lowest Selling Products (Dead Stock) */}
+                <div className="glass-card p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <h3 className="font-black text-sm text-slate-900 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      المنتجات الأقل مبيعاً / الراكدة (Dead Stock)
+                    </h3>
+                    <span className="text-[11px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full shrink-0">
+                      تحتاج عروض لتصريفها
+                    </span>
+                  </div>
+
+                  {filteredLowestSelling.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400 font-bold">
+                      {hasOwnerProductQuery
+                        ? 'لا توجد منتجات مطابقة في قائمة الأقل مبيعاً'
+                        : 'لا توجد بيانات منتجات راكدة حالياً'}
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100 text-xs">
+                      {filteredLowestSelling.map((p) => (
+                        <div key={p.id} className="py-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-black text-xs flex items-center justify-center shrink-0">
+                              {p._rank}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-bold text-slate-900 truncate">
+                                <HighlightText
+                                  text={p.name}
+                                  query={debouncedOwnerProductSearch}
+                                  variant="amber"
+                                />
+                              </h4>
+                              <p className="text-[11px] text-slate-400 truncate">
+                                كود:{' '}
+                                <HighlightText
+                                  text={p.sku}
+                                  query={debouncedOwnerProductSearch}
+                                  variant="amber"
+                                />{' '}
+                                | القسم:{' '}
+                                <HighlightText
+                                  text={p.category}
+                                  query={debouncedOwnerProductSearch}
+                                  variant="amber"
+                                />{' '}
+                                | المخزون بالمستودع: {p.stockQuantity} وحدة
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-left shrink-0">
+                            <div className="font-extrabold text-amber-800 text-xs sm:text-sm whitespace-nowrap">
+                              {p.totalQuantitySold} وحدة فقط
+                            </div>
+                            <div className="text-[11px] text-slate-400 whitespace-nowrap">
+                              سعر الوحدة: {p.retailPrice} ج.م
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── TAB 4: PAYMENT DESTINATIONS MANAGEMENT ─────────────────────────── */}
       {activeTab === 'payments' && (

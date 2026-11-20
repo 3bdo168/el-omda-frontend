@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MapPin, Plus, Edit2, Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
 import { Modal, ConfirmModal } from './Modal';
+import { ScrollableRow } from './ScrollableRow';
 
 export const DeliveryZonesPanel = () => {
   const queryClient = useQueryClient();
@@ -41,59 +42,70 @@ export const DeliveryZonesPanel = () => {
     {isLoading ? <div className="rounded-2xl bg-white p-8 text-center text-sm text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />جاري تحميل المناطق...</div> : zones.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">لا توجد مناطق توصيل. أضف أول منطقة للبدء.</div> :
       <>
         {/* Desktop / Tablet Table View (md+) */}
-        <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full min-w-[620px] text-right text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500">
-              <tr>
-                <th className="p-4">المنطقة</th>
-                <th className="p-4">الرسوم</th>
-                <th className="p-4">الترتيب</th>
-                <th className="p-4">الحالة</th>
-                <th className="p-4">الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {zones.map((zone) => (
-                <tr key={zone.id} className="text-slate-700">
-                  <td className="p-4 font-extrabold text-slate-900">{zone.nameAr}</td>
-                  <td className="p-4 font-bold">{Number(zone.fee).toFixed(2)} ج.م</td>
-                  <td className="p-4">{zone.sortOrder}</td>
-                  <td className="p-4">
-                    <button
-                      type="button"
-                      onClick={() => toggleMutation.mutate({ id: zone.id, isActive: !zone.isActive })}
-                      aria-label={zone.isActive ? 'إيقاف المنطقة' : 'تفعيل المنطقة'}
-                      className={`rounded-full px-3 py-1 text-xs font-bold ${
-                        zone.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      {zone.isActive ? 'نشطة' : 'متوقفة'}
-                    </button>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(zone)}
-                        className="rounded-lg bg-slate-100 p-2 text-slate-700 hover:bg-emerald-100"
-                        aria-label="تعديل"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleting(zone)}
-                        className="rounded-lg bg-slate-100 p-2 text-red-600 hover:bg-red-50"
-                        aria-label="حذف"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
+        <div className="hidden md:block rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <ScrollableRow
+            mode="table"
+            variant="emerald"
+            hasStickyStart
+            ariaLabel="جدول مناطق التوصيل"
+          >
+            <table className="w-full min-w-[680px] text-right text-sm">
+              <thead className="bg-slate-50 text-xs text-slate-500">
+                <tr>
+                  <th className="sticky right-0 z-20 bg-slate-50 p-4 border-l border-slate-200/80 shadow-[-4px_0_10px_-6px_rgba(15,23,42,0.12)]">
+                    المنطقة
+                  </th>
+                  <th className="p-4 whitespace-nowrap">الرسوم</th>
+                  <th className="p-4 whitespace-nowrap">الترتيب</th>
+                  <th className="p-4 whitespace-nowrap">الحالة</th>
+                  <th className="p-4 whitespace-nowrap">الإجراءات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {zones.map((zone) => (
+                  <tr key={zone.id} className="group text-slate-700 hover:bg-slate-50/70 transition-smooth">
+                    <td className="sticky right-0 z-20 bg-white group-hover:bg-slate-50 p-4 font-extrabold text-slate-900 border-l border-slate-100 shadow-[-4px_0_10px_-6px_rgba(15,23,42,0.12)] transition-smooth">
+                      {zone.nameAr}
+                    </td>
+                    <td className="p-4 font-bold whitespace-nowrap">{Number(zone.fee).toFixed(2)} ج.م</td>
+                    <td className="p-4 whitespace-nowrap">{zone.sortOrder}</td>
+                    <td className="p-4 whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => toggleMutation.mutate({ id: zone.id, isActive: !zone.isActive })}
+                        aria-label={zone.isActive ? 'إيقاف المنطقة' : 'تفعيل المنطقة'}
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          zone.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                        }`}
+                      >
+                        {zone.isActive ? 'نشطة' : 'متوقفة'}
+                      </button>
+                    </td>
+                    <td className="p-4 whitespace-nowrap">
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(zone)}
+                          className="rounded-lg bg-slate-100 p-2 text-slate-700 hover:bg-emerald-100"
+                          aria-label="تعديل"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleting(zone)}
+                          className="rounded-lg bg-slate-100 p-2 text-red-600 hover:bg-red-50"
+                          aria-label="حذف"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollableRow>
         </div>
 
         {/* Mobile Cards View (<md) */}

@@ -1,6 +1,6 @@
 /**
  * Arabic text normalization and search utilities for Beit El-Gomla
- * Handles: tashkeel, alef variants, taa marbuta/haa, ya/alef maqsura, tatweel
+ * Handles: tashkeel, alef variants, taa marbuta/haa, ya/alef maqsura, tatweel, Arabic digits
  */
 
 // Tashkeel / diacritics range (Arabic Unicode block diacritics)
@@ -8,25 +8,31 @@ const TASHKEEL_RE = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4
 // Tatweel (kashida)
 const TATWEEL_RE = /\u0640/g;
 
-/**
- * Normalize Arabic text for search matching:
- * - Strip tashkeel/diacritics
- * - Unify alef variants (أ إ آ ا) → ا
- * - Unify taa marbuta (ة) and haa (ه)
- * - Unify ya (ي) and alef maqsura (ى)
- * - Remove tatweel
- * - Lowercase Latin characters
- * - Trim and collapse whitespace
- */
-export function normalizeArabic(text) {
-  if (!text) return '';
-  return text
+function normalizeCharUnit(ch) {
+  return ch
     .replace(TASHKEEL_RE, '')
     .replace(TATWEEL_RE, '')
     .replace(/[أإآٱ]/g, 'ا')
     .replace(/ة/g, 'ه')
     .replace(/ى/g, 'ي')
-    .toLowerCase()
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .toLowerCase();
+}
+
+/**
+ * Normalize Arabic text for search matching:
+ * - Strip tashkeel/diacritics
+ * - Unify alef variants (أ إ آ ٱ) → ا
+ * - Unify taa marbuta (ة) and haa (ه)
+ * - Unify ya (ي) and alef maqsura (ى)
+ * - Convert Arabic-Indic digits (٠-٩) → 0-9
+ * - Remove tatweel
+ * - Lowercase Latin characters
+ * - Trim and collapse whitespace
+ */
+export function normalizeArabic(text) {
+  if (text === null || text === undefined) return '';
+  return normalizeCharUnit(String(text))
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -50,6 +56,37 @@ export function arabicStartsWith(haystack, needle) {
   const n = normalizeArabic(needle);
   if (!n) return false;
   return h.startsWith(n);
+}
+
+/**
+ * Check whether an array of searchable text fields matches the search query.
+ * Supports:
+ * - Full normalized phrase match in any field
+ * - Multi-word AND match across all provided fields (e.g. "ارز 25" or product name + category)
+ */
+export function matchesArabicFields(fields, query) {
+  const normalizedQuery = normalizeArabic(query);
+  if (!normalizedQuery) return true;
+
+  const fieldList = Array.isArray(fields) ? fields : [fields];
+  const normalizedFields = fieldList
+    .map((field) => normalizeArabic(field))
+    .filter(Boolean);
+
+  if (normalizedFields.length === 0) return false;
+
+  if (normalizedFields.some((field) => field.includes(normalizedQuery))) {
+    return true;
+  }
+
+  const tokens = normalizedQuery.split(' ').filter(Boolean);
+  if (tokens.length > 1) {
+    return tokens.every((token) =>
+      normalizedFields.some((field) => field.includes(token))
+    );
+  }
+
+  return false;
 }
 
 /**
@@ -125,46 +162,126 @@ export function scoreMatch(item, normalizedQuery, fields = ['name']) {
 }
 
 /**
- * Highlight matched parts of text for display.
- * Returns an array of { text, highlighted } segments.
+ * Build normalized string and character-by-character UTF-16 unit ranges
+ * synchronized 1-to-1 with normalizeArabic(text).
  */
-export function highlightMatch(text, query) {
-  if (!text || !query) return [{ text: text || '', highlighted: false }];
+function buildNormalizedCharMap(str) {
+  let normStr = '';
+  const normToUnitRange = [];
 
-  const normalizedText = normalizeArabic(text);
-  const normalizedQuery = normalizeArabic(query);
+  let unitIndex = 0;
+  let started = false;
+  let pendingSpaceRange = null;
 
-  if (!normalizedQuery) return [{ text, highlighted: false }];
+  for (const ch of str) {
+    const charLen = ch.length;
+    const charStart = unitIndex;
+    const charEnd = unitIndex + charLen;
+    unitIndex = charEnd;
 
-  // Find the match position in normalized text
-  const matchIndex = normalizedText.indexOf(normalizedQuery);
-  if (matchIndex === -1) return [{ text, highlighted: false }];
+    if (/\s/.test(ch)) {
+      if (started && !pendingSpaceRange) {
+        pendingSpaceRange = { start: charStart, end: charEnd };
+      }
+      continue;
+    }
 
-  // Map normalized indices back to original text indices
-  // Since normalization can change character positions, we do a character-level mapping
-  const origChars = [...text];
-  const normChars = [];
-  const normToOrig = []; // normIndex → origIndex
+    const normChar = normalizeCharUnit(ch);
+    if (!normChar) {
+      if (normToUnitRange.length > 0 && !pendingSpaceRange) {
+        normToUnitRange[normToUnitRange.length - 1].end = charEnd;
+      }
+      continue;
+    }
 
-  for (let i = 0; i < origChars.length; i++) {
-    const normChar = normalizeArabic(origChars[i]);
-    for (let j = 0; j < normChar.length; j++) {
-      normChars.push(normChar[j]);
-      normToOrig.push(i);
+    if (pendingSpaceRange) {
+      normStr += ' ';
+      normToUnitRange.push(pendingSpaceRange);
+      pendingSpaceRange = null;
+    }
+
+    started = true;
+    for (const nCh of normChar) {
+      normStr += nCh;
+      normToUnitRange.push({ start: charStart, end: charEnd });
     }
   }
 
-  const origStart = normToOrig[matchIndex] ?? 0;
-  const lastNormIdx = matchIndex + normalizedQuery.length - 1;
-  const origEnd = (normToOrig[lastNormIdx] ?? origChars.length - 1) + 1;
+  return { normStr, normToUnitRange };
+}
+
+/**
+ * Highlight matched parts of text for display.
+ * Handles diacritics, space normalization, all non-overlapping matches, and multi-word tokens.
+ * Returns an array of { text, highlighted } segments.
+ */
+export function highlightMatch(text, query) {
+  const str = text === null || text === undefined ? '' : String(text);
+  if (!str || !query) return [{ text: str, highlighted: false }];
+
+  const normalizedQuery = normalizeArabic(query);
+  if (!normalizedQuery) return [{ text: str, highlighted: false }];
+
+  const { normStr, normToUnitRange } = buildNormalizedCharMap(str);
+  if (!normStr) return [{ text: str, highlighted: false }];
+
+  const matchIntervals = [];
+
+  const collectMatches = (needle) => {
+    if (!needle) return;
+    let startIdx = 0;
+    while (startIdx < normStr.length) {
+      const idx = normStr.indexOf(needle, startIdx);
+      if (idx === -1) break;
+      const endIdx = idx + needle.length - 1;
+      const origStart = normToUnitRange[idx]?.start;
+      const origEnd = normToUnitRange[endIdx]?.end;
+      if (origStart !== undefined && origEnd !== undefined && origEnd > origStart) {
+        matchIntervals.push([origStart, origEnd]);
+      }
+      startIdx = idx + needle.length;
+    }
+  };
+
+  collectMatches(normalizedQuery);
+
+  if (matchIntervals.length === 0) {
+    const tokens = Array.from(new Set(normalizedQuery.split(' ').filter(Boolean)));
+    if (tokens.length > 1) {
+      for (const token of tokens) {
+        collectMatches(token);
+      }
+    }
+  }
+
+  if (matchIntervals.length === 0) {
+    return [{ text: str, highlighted: false }];
+  }
+
+  matchIntervals.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const merged = [matchIntervals[0]];
+  for (let i = 1; i < matchIntervals.length; i++) {
+    const [s, e] = matchIntervals[i];
+    const last = merged[merged.length - 1];
+    if (s <= last[1]) {
+      last[1] = Math.max(last[1], e);
+    } else {
+      merged.push([s, e]);
+    }
+  }
 
   const segments = [];
-  if (origStart > 0) {
-    segments.push({ text: text.slice(0, origStart), highlighted: false });
+  let cursor = 0;
+  for (const [start, end] of merged) {
+    if (start > cursor) {
+      segments.push({ text: str.slice(cursor, start), highlighted: false });
+    }
+    segments.push({ text: str.slice(start, end), highlighted: true });
+    cursor = end;
   }
-  segments.push({ text: text.slice(origStart, origEnd), highlighted: true });
-  if (origEnd < text.length) {
-    segments.push({ text: text.slice(origEnd), highlighted: false });
+  if (cursor < str.length) {
+    segments.push({ text: str.slice(cursor), highlighted: false });
   }
+
   return segments;
 }

@@ -25,6 +25,7 @@ import {
   UserCheck,
   Briefcase,
   Search,
+  Flame,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -42,6 +43,18 @@ export const NAV_CONFIG = [
     activeClassMobile: 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25',
     inactiveClassMobile: 'bg-slate-50 text-slate-700 hover:bg-slate-100',
     arrowColorMobile: 'text-slate-400',
+  },
+  {
+    id: 'offers',
+    label: '🔥 العروض والخصومات',
+    mobileLabel: '🔥 العروض والخصومات',
+    icon: Flame,
+    requireAuth: false,
+    allowedRoles: ['*'],
+    activeClassDesktop: 'header-nav-pill--active-orange',
+    activeClassMobile: 'bg-orange-600 text-white shadow-md shadow-orange-600/25',
+    inactiveClassMobile: 'bg-orange-50/60 text-orange-800 hover:bg-orange-50',
+    arrowColorMobile: 'text-orange-400',
   },
   {
     id: 'orders',
@@ -232,7 +245,7 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                 <div className="flex items-center gap-2">
                   <span className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-tight flex items-baseline gap-1.5">
                     بيت الجملة
-                    <span className="hidden min-[440px]:inline text-[10px] sm:text-[11px] font-normal text-slate-500 whitespace-nowrap">تبع مؤسسه صلى على النبى</span>
+                    <span className="hidden min-[440px]:inline text-[10px] sm:text-[11px] font-normal text-slate-500 whitespace-nowrap"> </span>
                   </span>
                   {/* Badge hidden on mobile (<640px) and tablet (<1024px), visible on lg+ */}
                   <span className="hidden lg:inline-flex items-center text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200 whitespace-nowrap">
@@ -464,9 +477,8 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                         <div
                           key={n.id}
                           onClick={() => handleNotificationItemClick(n)}
-                          className={`p-3.5 hover:bg-slate-50 cursor-pointer transition-smooth text-right group ${
-                            !n.isRead ? 'bg-emerald-50/40' : ''
-                          }`}
+                          className={`p-3.5 hover:bg-slate-50 cursor-pointer transition-smooth text-right group ${!n.isRead ? 'bg-emerald-50/40' : ''
+                            }`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -573,7 +585,7 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                     <div>
                       <h3 className="font-black text-slate-900 text-sm flex items-baseline gap-1">
                         بيت الجملة
-                        <span className="text-[9px] font-normal text-slate-500 whitespace-nowrap">تبع مؤسسه صلى على النبى</span>
+                        <span className="text-[9px] font-normal text-slate-500 whitespace-nowrap"> </span>
                       </h3>
                       <p className="text-[10px] text-slate-500 font-medium">تجارة الجملة والتجزئة</p>
                     </div>
@@ -596,9 +608,8 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                       <button
                         key={item.id}
                         onClick={() => handleNavClick(item.id)}
-                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-smooth ${
-                          isActive ? item.activeClassMobile : item.inactiveClassMobile
-                        }`}
+                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-smooth ${isActive ? item.activeClassMobile : item.inactiveClassMobile
+                          }`}
                       >
                         <div className="flex items-center gap-2.5">
                           <Icon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
@@ -723,7 +734,7 @@ export const Header = ({ activeTab, setActiveTab, onOpenCart, onOpenAuth, onNoti
                       <User className="w-5 h-5" />
                     </div>
                     <div className="font-extrabold text-slate-900 mb-1">
-                      أهلاً بك في بيت الجملة <span className="font-normal text-[10px] text-slate-500 whitespace-nowrap">تبع مؤسسه صلى على النبى</span>
+                      أهلاً بك في بيت الجملة <span className="font-normal text-[10px] text-slate-500 whitespace-nowrap"> </span>
                     </div>
                     <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
                       سجّل دخولك للوصول إلى أسعار تجار الجملة

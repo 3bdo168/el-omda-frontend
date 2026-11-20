@@ -458,6 +458,12 @@ body {
   box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.18);
 }
 
+.header-nav-pill--active-orange {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.14), rgba(249, 115, 22, 0.09));
+  color: #ea580c;
+  box-shadow: inset 0 0 0 1px rgba(234, 88, 12, 0.22);
+}
+
 /* ── Category Scroll Bar (with arrow buttons) ─────────────────────── */
 .cat-scroll-bar {
   display: flex;
